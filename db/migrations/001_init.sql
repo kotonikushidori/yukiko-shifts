@@ -167,4 +167,4 @@ VALUES (1, '中屋敷左官工業株式会社', 'nakaya-sakan', 'pro', 50);
 -- 開発用管理者（パスワード: admin1234 → 本番前に必ず変更）
 INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash)
 VALUES (1, 'admin', '管理者', 'admin',
-        '$2a$10$PLACEHOLDER_REPLACE_WITH_REAL_BCRYPT_HASH');
+        '$2a$10$2nldkLeypKnx0KJiLicK4.EtluomWZHKQ/KJo1BY3Vaj4iwyL2j86');
