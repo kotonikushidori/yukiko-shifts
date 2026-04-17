@@ -1218,6 +1218,78 @@ textarea.form-control {
   padding: 6px 4px 0;
 }
 
+/* ─── 作業者管理 ────────────────────────────────────────────── */
+.wm-page       { max-width: 720px; margin: 0 auto; }
+.wm-header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.wm-title      { font-size: 18px; font-weight: 700; margin: 0; }
+.wm-loading    { display: flex; justify-content: center; padding: 40px; }
+
+.wm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.wm-table th, .wm-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+.wm-table thead th {
+  font-size: 12px;
+  color: var(--color-text-sub);
+  background: #f8fafc;
+  font-weight: 600;
+}
+.wm-edit-btn {
+  font-size: 12px !important;
+  padding: 3px 12px !important;
+  width: auto !important;
+  background: #f1f5f9 !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+.wm-edit-btn:hover { background: #e2e8f0 !important; }
+
+/* モーダル */
+.wm-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.wm-modal {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  margin: 16px;
+}
+.wm-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  font-size: 15px;
+}
+.wm-modal-close {
+  background: none; border: none; font-size: 16px;
+  cursor: pointer; color: var(--color-text-sub); padding: 0 4px;
+}
+.wm-modal-body    { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.wm-modal-footer  { padding: 12px 20px 16px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--color-border); }
+
+.wm-field         { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.wm-field label   { font-size: 12px; color: var(--color-text-sub); font-weight: 600; }
+.wm-field-row     { flex-direction: row; gap: 12px; }
+.wm-required      { color: #dc2626; }
+.wm-error         { font-size: 13px; color: #dc2626; padding: 6px 10px; background: #fee2e2; border-radius: var(--radius-sm); }
+.wm-cancel        { background: white !important; border: 1.5px solid var(--color-border) !important; color: var(--color-text-sub) !important; }
+
 /* ─── Kanban Board (1日表示) ─────────────────────────────────── */
 .kanban-board {
   display: flex;

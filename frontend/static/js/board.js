@@ -1,7 +1,7 @@
 // board.js — 管理者シフトボード
 
 import { apiGetBoard, apiGetSites, apiCreateAssign, apiDeleteAssign,
-         apiGetLockStatus, apiLockMonth, apiUnlockMonth } from './api.js';
+         apiGetLockStatus, apiLockMonth, apiUnlockMonth, apiGetWorkers } from './api.js';
 import { HOLIDAYS } from './holidays.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -11,10 +11,32 @@ const st = {
   assignments: [],
   siteList: [],     // GET /api/sites から取得した全現場
   siteMap: {},      // { siteId: siteName }
-  workerMap: {},    // { userId: userName }
-  locked: false,    // 表示中の月/日のロック状態
+  workerMap: {},    // { userId: userName (フルネーム) }
+  workerDispMap: {},// { userId: 表示名（苗字 or 苗字+頭文字） }
+  workers: [],      // 作業者マスタ全件
+  locked: false,
   loading: false,
 };
+
+// ─── Worker Display Names ────────────────────────────────────
+// 苗字が重複するときだけ名前の頭1文字を付加する
+function buildWorkerDisplayNames(workers) {
+  const lastNameCount = {};
+  for (const w of workers) {
+    const ln = w.last_name || w.name;
+    lastNameCount[ln] = (lastNameCount[ln] || 0) + 1;
+  }
+  const disp = {};
+  for (const w of workers) {
+    const ln = w.last_name || w.name;
+    if (lastNameCount[ln] > 1 && w.first_name) {
+      disp[w.id] = ln + w.first_name[0];   // 例: 田中一, 田中二
+    } else {
+      disp[w.id] = ln;                      // 例: 佐藤
+    }
+  }
+  return disp;
+}
 
 // DnD 転送中の情報
 let _drag = null; // { assignId, userId, slot, fromSiteId, fromDate }
@@ -126,10 +148,14 @@ export async function loadBoard() {
     for (const s of st.siteList) {
       if (s.id) st.siteMap[s.id] = s.name;
     }
-    // 作業者マスタから workerMap を構築（シフト未登録でも全員表示）
-    for (const w of (workers ?? [])) {
-      if (w.id) st.workerMap[w.id] = w.name;
+    // 作業者マスタから workerMap / workerDispMap を構築
+    st.workers = workers ?? [];
+    for (const w of st.workers) {
+      if (w.id) st.workerMap[w.id] = w.last_name && w.first_name
+        ? w.last_name + ' ' + w.first_name
+        : w.name;
     }
+    st.workerDispMap = buildWorkerDisplayNames(st.workers);
   } catch (e) {
     showToast('データ取得エラー: ' + e.message, 'error');
     st.assignments = [];
@@ -145,7 +171,7 @@ const SLOT_CLS = { AM: 'badge-am', PM: 'badge-pm', ALL: 'badge-all' };
 /** カンバン用カード（1日表示） */
 function renderKanbanCard(a) {
   const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
-  const name = escHtml(a.user_name ?? `ID:${a.user_id}`);
+  const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date = parseWorkDate(a.work_date);
   return `
     <div class="kanban-card ${cls}" draggable="true"
@@ -163,7 +189,7 @@ function renderKanbanCard(a) {
 /** 週表示用バッジ（ドラッグ可能） */
 function renderWeekBadge(a) {
   const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
-  const name = escHtml(a.user_name ?? `ID:${a.user_id}`);
+  const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date = parseWorkDate(a.work_date);
   return `
     <span class="badge week-badge ${cls}" draggable="true"

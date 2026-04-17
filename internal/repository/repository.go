@@ -337,13 +337,45 @@ func (r *UserRepository) FindWorkers(ctx context.Context) ([]model.User, error) 
 
 func (r *UserRepository) Create(ctx context.Context, u model.User) (int64, error) {
 	const q = `
-		INSERT INTO users (employee_id, email, password_hash, name, role, phone, status)
-		VALUES (:employee_id, :email, :password_hash, :name, :role, :phone, :status)`
+		INSERT INTO users
+			(tenant_id, employee_id, email, password_hash, name, last_name, first_name, role, phone, status)
+		VALUES
+			(:tenant_id, :employee_id, :email, :password_hash, :name, :last_name, :first_name, :role, :phone, :status)`
 	res, err := r.db.NamedExecContext(ctx, q, u)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (r *UserRepository) Update(ctx context.Context, u model.User) error {
+	const q = `
+		UPDATE users SET
+			name        = :name,
+			last_name   = :last_name,
+			first_name  = :first_name,
+			phone       = :phone,
+			updated_at  = CURRENT_TIMESTAMP
+		WHERE id = :id AND tenant_id = :tenant_id`
+	_, err := r.db.NamedExecContext(ctx, q, u)
+	return err
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, id int64, hash string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		hash, id)
+	return err
+}
+
+func (r *UserRepository) FindByID(ctx context.Context, tenantID, id int64) (*model.User, error) {
+	var u model.User
+	err := r.db.GetContext(ctx, &u,
+		`SELECT * FROM users WHERE id = ? AND tenant_id = ?`, id, tenantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &u, err
 }
 
 // ============================================================

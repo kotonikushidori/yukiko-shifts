@@ -4,6 +4,7 @@ import { apiLogin } from './api.js';
 import { initBoard } from './board.js';
 import { initSites } from './sites.js';
 import { initWorker } from './worker.js';
+import { initWorkers } from './workers.js';
 
 // ─── Auth helpers ─────────────────────────────────────────────
 function getToken() { return localStorage.getItem('shift_token'); }
@@ -100,7 +101,8 @@ function renderApp() {
 
   const navItems = isAdmin
     ? `<button class="nav-item" data-page="board">📅 シフトボード</button>
-       <button class="nav-item" data-page="sites">🏗 現場マスタ</button>`
+       <button class="nav-item" data-page="sites">🏗 現場マスタ</button>
+       <button class="nav-item" data-page="workers">👷 作業者管理</button>`
     : `<button class="nav-item" data-page="worker">📋 マイシフト</button>`;
 
   document.getElementById('app').innerHTML = `
@@ -156,6 +158,12 @@ function renderContent() {
            style="flex:1;overflow:auto;padding:20px 24px;">
       </div>`;
     initSites();
+  } else if (currentPage === 'workers') {
+    root.innerHTML = `
+      <div id="workers-root"
+           style="flex:1;overflow:auto;padding:20px 24px;">
+      </div>`;
+    initWorkers();
   } else if (currentPage === 'worker') {
     const user = getUser();
     root.innerHTML = `

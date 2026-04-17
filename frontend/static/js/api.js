@@ -46,13 +46,29 @@ export function apiDeleteAssign(id) {
   return request(`/api/shifts/assign/${id}`, { method: 'DELETE' });
 }
 
-// GET /api/workers  (Phase 2 — 未実装でも graceful fallback)
+// GET /api/workers
 export async function apiGetWorkers() {
   try {
     return await request('/api/workers');
   } catch {
     return null;
   }
+}
+
+// POST /api/admin/workers
+export function apiCreateWorker(data) {
+  return request('/api/admin/workers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// PUT /api/admin/workers/{id}
+export function apiUpdateWorker(id, data) {
+  return request(`/api/admin/workers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
 // ─── 現場マスタ ──────────────────────────────────────────────

@@ -118,7 +118,7 @@ func NewShiftHandler(
 	return &ShiftHandler{shiftRepo: shiftRepo, userRepo: userRepo, validator: v}
 }
 
-// GET /api/workers  — 作業者一覧（管理者用）
+// GET /api/workers  — 作業者一覧
 func (h *ShiftHandler) GetWorkers(w http.ResponseWriter, r *http.Request) {
 	workers, err := h.userRepo.FindWorkers(r.Context())
 	if err != nil {
@@ -126,6 +126,82 @@ func (h *ShiftHandler) GetWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, workers)
+}
+
+// POST /api/admin/workers  — 作業者登録
+func (h *ShiftHandler) CreateWorker(w http.ResponseWriter, r *http.Request) {
+	var req model.WorkerUpsertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "リクエスト形式が不正です")
+		return
+	}
+	if req.EmployeeID == "" || req.LastName == "" || req.FirstName == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, "社員ID・苗字・名前・パスワードは必須です")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "パスワード処理エラー")
+		return
+	}
+	fullName := req.LastName + req.FirstName
+	id, err := h.userRepo.Create(r.Context(), model.User{
+		TenantID:     currentTenantID(r),
+		EmployeeID:   req.EmployeeID,
+		Name:         fullName,
+		LastName:     &req.LastName,
+		FirstName:    &req.FirstName,
+		PasswordHash: string(hash),
+		Role:         model.RoleWorker,
+		Phone:        req.Phone,
+		Status:       "active",
+	})
+	if err != nil {
+		writeError(w, http.StatusConflict, "社員IDが既に使用されています")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
+}
+
+// PUT /api/admin/workers/{id}  — 作業者更新
+func (h *ShiftHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id が不正です")
+		return
+	}
+	tenantID := currentTenantID(r)
+	existing, err := h.userRepo.FindByID(r.Context(), tenantID, id)
+	if err != nil || existing == nil {
+		writeError(w, http.StatusNotFound, "作業者が見つかりません")
+		return
+	}
+	var req model.WorkerUpsertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "リクエスト形式が不正です")
+		return
+	}
+	if req.LastName == "" || req.FirstName == "" {
+		writeError(w, http.StatusBadRequest, "苗字・名前は必須です")
+		return
+	}
+	fullName := req.LastName + req.FirstName
+	if err := h.userRepo.Update(r.Context(), model.User{
+		ID:        id,
+		TenantID:  tenantID,
+		Name:      fullName,
+		LastName:  &req.LastName,
+		FirstName: &req.FirstName,
+		Phone:     req.Phone,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "更新エラー")
+		return
+	}
+	if req.Password != "" {
+		hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		_ = h.userRepo.UpdatePassword(r.Context(), id, string(hash))
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // GET /api/shifts/board?from=2025-05-25&to=2025-05-31

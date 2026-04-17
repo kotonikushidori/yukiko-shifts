@@ -50,6 +50,8 @@ type User struct {
 	Email        *string   `db:"email"        json:"email,omitempty"`
 	PasswordHash string    `db:"password_hash" json:"-"`
 	Name         string    `db:"name"         json:"name"`
+	LastName     *string   `db:"last_name"    json:"last_name,omitempty"`
+	FirstName    *string   `db:"first_name"   json:"first_name,omitempty"`
 	Role         Role      `db:"role"         json:"role"`
 	Phone        *string   `db:"phone"        json:"phone,omitempty"`
 	Status       string    `db:"status"       json:"status"`
@@ -174,6 +176,14 @@ type LoginResponse struct {
 type AssignRequest struct {
 	UserID   int64    `json:"user_id"`
 	TimeSlot TimeSlot `json:"time_slot"`
+}
+
+type WorkerUpsertRequest struct {
+	EmployeeID string  `json:"employee_id"`
+	LastName   string  `json:"last_name"`
+	FirstName  string  `json:"first_name"`
+	Password   string  `json:"password,omitempty"` // 新規時必須、更新時は省略可
+	Phone      *string `json:"phone,omitempty"`
 }
 
 type DailyReportUpsertRequest struct {

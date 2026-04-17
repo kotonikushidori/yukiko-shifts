@@ -188,8 +188,8 @@ INSERT OR IGNORE INTO sites (tenant_id, name, status) VALUES
   (1, '山鼻モールアックス',   'active');
 
 -- 開発用作業者（パスワード: worker1234）
-INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash) VALUES
-  (1, 'w001', '作業者01', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
-  (1, 'w002', '作業者02', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
-  (1, 'w003', '作業者03', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
-  (1, 'w004', '作業者04', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm');
+INSERT OR IGNORE INTO users (tenant_id, employee_id, name, last_name, first_name, role, password_hash) VALUES
+  (1, 'w001', '田中一郎', '田中', '一郎', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w002', '佐藤花子', '佐藤', '花子', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w003', '田中二郎', '田中', '二郎', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w004', '鈴木太郎', '鈴木', '太郎', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm');
