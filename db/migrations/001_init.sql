@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT,
     password_hash TEXT    NOT NULL,
     name          TEXT    NOT NULL,
+    last_name     TEXT,
+    first_name    TEXT,
     role          TEXT    NOT NULL DEFAULT 'worker', -- 'superadmin' | 'admin' | 'worker'
     phone         TEXT,
     status        TEXT    NOT NULL DEFAULT 'active',
