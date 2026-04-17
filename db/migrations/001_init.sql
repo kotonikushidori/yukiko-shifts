@@ -168,3 +168,10 @@ VALUES (1, '中屋敷左官工業株式会社', 'nakaya-sakan', 'pro', 50);
 INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash)
 VALUES (1, 'admin', '管理者', 'admin',
         '$2a$10$2nldkLeypKnx0KJiLicK4.EtluomWZHKQ/KJo1BY3Vaj4iwyL2j86');
+
+-- 開発用作業者（パスワード: worker1234）
+INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash) VALUES
+  (1, 'w001', '作業者01', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w002', '作業者02', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w003', '作業者03', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
+  (1, 'w004', '作業者04', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm');
