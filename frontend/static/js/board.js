@@ -113,9 +113,12 @@ export function groupDay(assignments, dateStr) {
 }
 
 // ─── Load ────────────────────────────────────────────────────
-export async function loadBoard() {
-  st.loading = true;
-  renderAll();
+// silent: true のときはローディングスピナーを出さずにデータだけ更新する
+export async function loadBoard({ silent = false } = {}) {
+  if (!silent) {
+    st.loading = true;
+    renderAll();
+  }
 
   let from, to;
   if (st.viewMode === 'week') {
@@ -435,7 +438,7 @@ function bindCells() {
       try {
         await apiDeleteAssign(id);
         showToast('削除しました', 'success');
-        await loadBoard();
+        await loadBoard({ silent: true });
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -506,7 +509,7 @@ function bindDrag() {
         await apiDeleteAssign(drag.assignId);
         await apiCreateAssign(toSiteId, toDate, drag.userId, drag.slot);
         showToast('移動しました', 'success');
-        await loadBoard();
+        await loadBoard({ silent: true });
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -618,7 +621,7 @@ async function submitAdd(close) {
     await apiCreateAssign(_modalCtx.siteId, _modalCtx.date, userId, _modalCtx.slot);
     close();
     showToast('アサインを追加しました', 'success');
-    await loadBoard();
+    await loadBoard({ silent: true });
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.add('visible');
