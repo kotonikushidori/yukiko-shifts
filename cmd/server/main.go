@@ -80,6 +80,7 @@ func main() {
 		r.Use(jwtauth.Authenticator(tokenAuth))
 		r.Use(tenantMiddleware) // ★ JWTからtenant_idをContextに注入
 
+		r.Get("/api/workers",       shiftH.GetWorkers)
 		r.Get("/api/shifts/board",  shiftH.GetBoard)
 		r.Get("/api/shifts/my",     shiftH.GetMyShifts)
 

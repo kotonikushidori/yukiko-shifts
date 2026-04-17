@@ -118,6 +118,16 @@ func NewShiftHandler(
 	return &ShiftHandler{shiftRepo: shiftRepo, userRepo: userRepo, validator: v}
 }
 
+// GET /api/workers  — 作業者一覧（管理者用）
+func (h *ShiftHandler) GetWorkers(w http.ResponseWriter, r *http.Request) {
+	workers, err := h.userRepo.FindWorkers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "データ取得エラー")
+		return
+	}
+	writeJSON(w, http.StatusOK, workers)
+}
+
 // GET /api/shifts/board?from=2025-05-25&to=2025-05-31
 // シフトボード表示用（管理者）
 func (h *ShiftHandler) GetBoard(w http.ResponseWriter, r *http.Request) {

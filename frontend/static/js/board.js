@@ -113,10 +113,11 @@ export async function loadBoard() {
     : st.currentDate.getMonth() + 1;
 
   try {
-    const [assignments, sites, lockData] = await Promise.all([
+    const [assignments, sites, lockData, workers] = await Promise.all([
       apiGetBoard(from, to),
       apiGetSites().catch(() => []),
       apiGetLockStatus(lockY, lockM).catch(() => ({ locked: false })),
+      apiGetWorkers().catch(() => []),
     ]);
     st.assignments = assignments ?? [];
     st.siteList    = sites ?? [];
@@ -124,6 +125,10 @@ export async function loadBoard() {
     buildMaps(st.assignments);
     for (const s of st.siteList) {
       if (s.id) st.siteMap[s.id] = s.name;
+    }
+    // 作業者マスタから workerMap を構築（シフト未登録でも全員表示）
+    for (const w of (workers ?? [])) {
+      if (w.id) st.workerMap[w.id] = w.name;
     }
   } catch (e) {
     showToast('データ取得エラー: ' + e.message, 'error');
