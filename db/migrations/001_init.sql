@@ -169,6 +169,24 @@ INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash)
 VALUES (1, 'admin', '管理者', 'admin',
         '$2a$10$2nldkLeypKnx0KJiLicK4.EtluomWZHKQ/KJo1BY3Vaj4iwyL2j86');
 
+-- 開発用現場マスタ
+INSERT OR IGNORE INTO sites (tenant_id, name, status) VALUES
+  (1, '南平岸４条',           'active'),
+  (1, '島松隊舎',             'active'),
+  (1, 'CR澄川',               'active'),
+  (1, 'すすきの駅前',         'active'),
+  (1, 'トヨタ分室',           'active'),
+  (1, '北広工業',             'active'),
+  (1, '住材モールアックス',   'active'),
+  (1, '新単団地',             'active'),
+  (1, '第一生命ビルスロープ', 'active'),
+  (1, '北１０東４',           'active'),
+  (1, 'CR札幌東',             'active'),
+  (1, 'CMS宮の沢',            'active'),
+  (1, 'CMS北３東７',          'active'),
+  (1, '豊平４−８',           'active'),
+  (1, '山鼻モールアックス',   'active');
+
 -- 開発用作業者（パスワード: worker1234）
 INSERT OR IGNORE INTO users (tenant_id, employee_id, name, role, password_hash) VALUES
   (1, 'w001', '作業者01', 'worker', '$2a$10$lK7o4tvufPn7hiNeMMuhEerIEK8K/Snge9PbCNNvWPtqcwMEV7XBm'),
