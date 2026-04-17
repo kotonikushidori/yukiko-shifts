@@ -213,11 +213,18 @@ function renderKanban() {
   const dateStr = fmtDate(st.currentDate);
   const grouped = groupDay(st.assignments, dateStr);
 
-  // 表示する現場: siteList の稼働中 + アサインがある現場（削除済みなど）
+  // 表示する現場: siteList の順を基準に固定し、末尾にアサインのみの現場を追加
   let sites;
   if (st.siteList.length > 0) {
     const withAssign = new Set(Object.keys(grouped).map(Number));
-    sites = st.siteList.filter(s => s.status === 'active' || withAssign.has(s.id));
+    // siteList 順を優先（active + アサインあり）
+    const inList = st.siteList.filter(s => s.status === 'active' || withAssign.has(s.id));
+    const inListIds = new Set(inList.map(s => s.id));
+    // siteList にない現場（削除済み等）を末尾に追加
+    const extra = [...withAssign]
+      .filter(id => !inListIds.has(id))
+      .map(id => ({ id, name: grouped[String(id)]?.name ?? `現場#${id}` }));
+    sites = [...inList, ...extra];
   } else {
     sites = Object.entries(grouped).map(([id, v]) => ({ id: Number(id), name: v.name }));
   }
@@ -261,9 +268,12 @@ function renderWeekTable() {
   const today   = fmtDate(new Date());
   const grouped = groupWeek(st.assignments);
 
-  // 週に表示する現場: 稼働中の全現場 + アサインのある現場
-  const siteIdSet = new Set(Object.keys(grouped).map(Number));
-  st.siteList.filter(s => s.status === 'active').forEach(s => siteIdSet.add(s.id));
+  // 週に表示する現場: siteList の順を基準に固定し、末尾にアサインのみの現場を追加
+  // ※ grouped を先に入れると DnD 後にアサインの変化でソート順が変わってしまうため
+  const siteIdSet = new Set([
+    ...st.siteList.filter(s => s.status === 'active').map(s => s.id),
+    ...Object.keys(grouped).map(Number),
+  ]);
   const siteIds = [...siteIdSet].map(String);
 
   const thCols = dates.map(d => {
