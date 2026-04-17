@@ -1,0 +1,28 @@
+# fly.toml — Fly.io デプロイ設定
+app = "shift-app"          # ← fly launch 後に自動で書き換わる
+primary_region = "nrt"     # 東京リージョン
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT    = "8989"
+  DB_PATH = "/app/data/shift.db"
+  TZ      = "Asia/Tokyo"
+
+[http_service]
+  internal_port       = 8989
+  force_https         = true
+  auto_stop_machines  = true   # アイドル時に自動停止（無料枠節約）
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# SQLite 永続ボリューム
+[mounts]
+  source      = "shift_data"
+  destination = "/app/data"

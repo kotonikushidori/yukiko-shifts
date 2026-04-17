@@ -1,0 +1,11 @@
+# DB
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# バイナリ
+shift-server
+
+# 環境変数
+.env

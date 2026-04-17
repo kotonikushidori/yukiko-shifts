@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8989:8989"
+    volumes:
+      - ./data:/app/data
+    environment:
+      JWT_SECRET: "local-dev-secret-32chars-minimum!!"
+      TZ: Asia/Tokyo
+    restart: unless-stopped
