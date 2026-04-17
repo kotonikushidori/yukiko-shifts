@@ -18,6 +18,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/yourorg/shift-app/internal/handler"
+	"github.com/yourorg/shift-app/internal/model"
 	"github.com/yourorg/shift-app/internal/push"
 	"github.com/yourorg/shift-app/internal/repository"
 	"github.com/yourorg/shift-app/internal/validator"
@@ -226,7 +227,18 @@ func getEnv(key, fallback string) string {
 }
 
 // ── 毎日 19:00 JST の翌日シフトリマインド ─────────────────────────
+// reminderSender は sendTomorrowReminders が使う最小インターフェース（テスト用モックを差し込み可能）
+type reminderSender interface {
+	SendAll(subs []model.PushSubscription, title, body, url string)
+}
+
 func startDailyReminder(db *sqlx.DB, pushRepo *repository.PushRepository, sender *push.Sender) {
+	// nil *push.Sender をインターフェースに変換すると non-nil interface になるため、
+	// ここで明示的に nil チェックして早期 return する
+	if sender == nil {
+		log.Println("daily reminder: disabled (VAPID keys not configured)")
+		return
+	}
 	jst, err := time.LoadLocation("Asia/Tokyo")
 	if err != nil {
 		jst = time.FixedZone("JST", 9*60*60)
@@ -243,7 +255,7 @@ func startDailyReminder(db *sqlx.DB, pushRepo *repository.PushRepository, sender
 	}
 }
 
-func sendTomorrowReminders(db *sqlx.DB, pushRepo *repository.PushRepository, sender *push.Sender) {
+func sendTomorrowReminders(db *sqlx.DB, pushRepo *repository.PushRepository, sender reminderSender) {
 	if sender == nil {
 		return
 	}
