@@ -209,6 +209,32 @@ type MonthlySummaryRow struct {
 }
 
 // ──────────────────────────────────────
+// PushSubscription（プッシュ通知サブスクリプション）
+// ──────────────────────────────────────
+type PushSubscription struct {
+	ID        int64     `db:"id"         json:"id"`
+	TenantID  int64     `db:"tenant_id"  json:"-"`
+	UserID    int64     `db:"user_id"    json:"-"`
+	Endpoint  string    `db:"endpoint"   json:"endpoint"`
+	P256dh    string    `db:"p256dh"     json:"p256dh"`
+	Auth      string    `db:"auth_key"   json:"auth"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// PushSubscribeRequest はフロントエンドから送られる購読情報
+type PushSubscribeRequest struct {
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
+}
+
+// PushHopeSubmitRequest は作業者が希望を提出するときのリクエスト
+type PushHopeSubmitRequest struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+}
+
+// ──────────────────────────────────────
 // Tenant（テナント）
 // ──────────────────────────────────────
 type Plan string

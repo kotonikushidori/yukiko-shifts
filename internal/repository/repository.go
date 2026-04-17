@@ -424,3 +424,49 @@ func (r *LockRepository) Unlock(ctx context.Context, tenantID int64, year, month
 		tenantID, year, month)
 	return err
 }
+
+// ============================================================
+// PushRepository
+// ============================================================
+
+type PushRepository struct{ db *sqlx.DB }
+
+func NewPushRepository(db *sqlx.DB) *PushRepository { return &PushRepository{db: db} }
+
+// Upsert はサブスクリプションを登録／更新する（デバイス再登録に対応）
+func (r *PushRepository) Upsert(ctx context.Context, tenantID, userID int64, endpoint, p256dh, auth string) error {
+	const q = `
+		INSERT INTO push_subscriptions (tenant_id, user_id, endpoint, p256dh, auth_key)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(user_id, endpoint) DO UPDATE SET
+			p256dh   = excluded.p256dh,
+			auth_key = excluded.auth_key`
+	_, err := r.db.ExecContext(ctx, q, tenantID, userID, endpoint, p256dh, auth)
+	return err
+}
+
+// Delete は指定 endpoint のサブスクリプションを削除する
+func (r *PushRepository) Delete(ctx context.Context, userID int64, endpoint string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?`, userID, endpoint)
+	return err
+}
+
+// GetByUserID は指定ユーザーの全サブスクリプションを返す
+func (r *PushRepository) GetByUserID(ctx context.Context, userID int64) ([]model.PushSubscription, error) {
+	var subs []model.PushSubscription
+	err := r.db.SelectContext(ctx, &subs,
+		`SELECT * FROM push_subscriptions WHERE user_id=?`, userID)
+	return subs, err
+}
+
+// GetByRole は指定テナント内の指定ロールを持つユーザーの全サブスクリプションを返す
+func (r *PushRepository) GetByRole(ctx context.Context, tenantID int64, role string) ([]model.PushSubscription, error) {
+	const q = `
+		SELECT ps.* FROM push_subscriptions ps
+		JOIN users u ON ps.user_id = u.id
+		WHERE ps.tenant_id = ? AND u.role = ?`
+	var subs []model.PushSubscription
+	err := r.db.SelectContext(ctx, &subs, q, tenantID, role)
+	return subs, err
+}

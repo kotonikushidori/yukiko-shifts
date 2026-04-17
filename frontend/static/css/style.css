@@ -1218,6 +1218,21 @@ textarea.form-control {
   padding: 6px 4px 0;
 }
 
+.wk-submit-row {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+.wk-hope-submit-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.wk-hope-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* ─── 作業者管理 ────────────────────────────────────────────── */
 .wm-page       { max-width: 720px; margin: 0 auto; }
 .wm-header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }

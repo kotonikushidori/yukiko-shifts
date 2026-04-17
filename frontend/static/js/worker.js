@@ -2,7 +2,7 @@
 
 import {
   apiGetBoard, apiGetMyReports, apiUpsertReport,
-  apiGetLockStatus, apiUpdateSiteClient,
+  apiGetLockStatus, apiUpdateSiteClient, apiHopeSubmit,
 } from './api.js';
 import { HOLIDAYS } from './holidays.js';
 
@@ -341,6 +341,13 @@ function renderMonthlyTable(year, month, assignByDate) {
         </tfoot>
       </table>
       <div class="wk-absent-summary">休み希望日: ${absentStr}</div>
+      ${!st.locked ? `
+        <div class="wk-submit-row">
+          <button class="btn btn-primary wk-hope-submit-btn"
+                  data-year="${year}" data-month="${month}">
+            この月の希望を管理者に提出する
+          </button>
+        </div>` : ''}
     </div>`;
 }
 
@@ -445,6 +452,22 @@ function bindRows(root) {
 }
 
 function bindMonthlyTable(root, year, month) {
+  // 希望提出ボタン
+  root.querySelector('.wk-hope-submit-btn')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = '送信中…';
+    try {
+      await apiHopeSubmit(year, month);
+      showToast(`${year}年${month}月の希望を管理者に送信しました`, 'success');
+      btn.textContent = '提出済み ✓';
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'この月の希望を管理者に提出する';
+    }
+  });
+
   root.querySelectorAll('.wk-client-save-btn').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();

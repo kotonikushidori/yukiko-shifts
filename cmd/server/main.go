@@ -18,6 +18,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/yourorg/shift-app/internal/handler"
+	"github.com/yourorg/shift-app/internal/push"
 	"github.com/yourorg/shift-app/internal/repository"
 	"github.com/yourorg/shift-app/internal/validator"
 )
@@ -32,9 +33,11 @@ const (
 )
 
 func main() {
-	jwtSecret := getEnv("JWT_SECRET", "change-me-in-production-32chars!!")
-	dbPath    := getEnv("DB_PATH",    "./shift.db")
-	port      := getEnv("PORT",       "8989")
+	jwtSecret      := getEnv("JWT_SECRET",       "change-me-in-production-32chars!!")
+	dbPath         := getEnv("DB_PATH",          "./shift.db")
+	port           := getEnv("PORT",             "8989")
+	vapidPublicKey  := getEnv("VAPID_PUBLIC_KEY",  "")
+	vapidPrivateKey := getEnv("VAPID_PRIVATE_KEY", "")
 
 	db, err := sqlx.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
@@ -47,19 +50,34 @@ func main() {
 		log.Fatalf("migration: %v", err)
 	}
 
+	// VAPID キーが未設定の場合はヒントをログに出す
+	if vapidPublicKey == "" || vapidPrivateKey == "" {
+		log.Println("⚠ VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY が未設定です。プッシュ通知は無効になります。")
+		log.Println("  キーを生成するには: docker run --rm golang:1.22-alpine sh -c '" +
+			`go install github.com/SherClockHolmes/webpush-go/cmd/vapid@latest && vapid'`)
+	}
+
 	tokenAuth  := jwtauth.New("HS256", []byte(jwtSecret), nil)
 	userRepo   := repository.NewUserRepository(db)
 	shiftRepo  := repository.NewShiftRepository(db)
 	reportRepo := repository.NewDailyReportRepository(db)
 	siteRepo   := repository.NewSiteRepository(db)
 	lockRepo   := repository.NewLockRepository(db)
+	pushRepo   := repository.NewPushRepository(db)
 	shiftVal   := validator.New(shiftRepo)
+
+	// プッシュ送信者（キー未設定なら nil → 全送信がno-op）
+	pushSender := push.NewSender(vapidPrivateKey, vapidPublicKey)
 
 	authH   := handler.NewAuthHandler(userRepo, tokenAuth)
 	shiftH  := handler.NewShiftHandler(shiftRepo, userRepo, shiftVal)
 	reportH := handler.NewDailyReportHandler(reportRepo)
 	siteH   := handler.NewSiteHandler(siteRepo)
 	lockH   := handler.NewLockHandler(lockRepo)
+	pushH   := handler.NewPushHandler(pushRepo, userRepo, pushSender)
+
+	// 毎日 19:00 JST に翌日シフトのリマインドを送信
+	go startDailyReminder(db, pushRepo, pushSender)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -109,6 +127,12 @@ func main() {
 		r.Get("/api/shifts/lock",                  lockH.GetStatus)
 		r.Post("/api/admin/shifts/lock",            handler.RequireAdmin(lockH.Lock))
 		r.Delete("/api/admin/shifts/lock",          handler.RequireAdmin(lockH.Unlock))
+
+		// Web Push
+		r.Get("/api/push/vapid-key",    pushH.GetVapidKey)
+		r.Post("/api/push/subscribe",   pushH.Subscribe)
+		r.Delete("/api/push/subscribe", pushH.Unsubscribe)
+		r.Post("/api/push/hope-submit", pushH.HopeSubmit)
 	})
 
 	// SPAフォールバック
@@ -199,4 +223,71 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// ── 毎日 19:00 JST の翌日シフトリマインド ─────────────────────────
+func startDailyReminder(db *sqlx.DB, pushRepo *repository.PushRepository, sender *push.Sender) {
+	jst, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		jst = time.FixedZone("JST", 9*60*60)
+	}
+	for {
+		now := time.Now().In(jst)
+		next := time.Date(now.Year(), now.Month(), now.Day(), 19, 0, 0, 0, jst)
+		if !now.Before(next) {
+			next = next.Add(24 * time.Hour)
+		}
+		log.Printf("daily reminder: 次回送信 %s", next.Format("2006-01-02 15:04 MST"))
+		time.Sleep(time.Until(next))
+		sendTomorrowReminders(db, pushRepo, sender)
+	}
+}
+
+func sendTomorrowReminders(db *sqlx.DB, pushRepo *repository.PushRepository, sender *push.Sender) {
+	if sender == nil {
+		return
+	}
+	ctx := context.Background()
+	jst, _ := time.LoadLocation("Asia/Tokyo")
+	tomorrow := time.Now().In(jst).Add(24 * time.Hour).Format("2006-01-02")
+
+	type row struct {
+		UserID   int64  `db:"user_id"`
+		UserName string `db:"user_name"`
+		SiteName string `db:"site_name"`
+		TimeSlot string `db:"time_slot"`
+	}
+	var rows []row
+	err := db.SelectContext(ctx, &rows, `
+		SELECT sa.user_id, u.name AS user_name, s.name AS site_name, sa.time_slot
+		FROM shift_assignments sa
+		JOIN users u ON sa.user_id = u.id
+		JOIN sites s ON sa.site_id = s.id
+		WHERE sa.work_date = ?`, tomorrow)
+	if err != nil {
+		log.Printf("daily reminder: クエリエラー: %v", err)
+		return
+	}
+
+	// ユーザーごとにまとめる
+	type userInfo struct{ name string; slots []string }
+	byUser := map[int64]*userInfo{}
+	for _, r := range rows {
+		if _, ok := byUser[r.UserID]; !ok {
+			byUser[r.UserID] = &userInfo{name: r.UserName}
+		}
+		byUser[r.UserID].slots = append(byUser[r.UserID].slots, r.SiteName+"("+r.TimeSlot+")")
+	}
+
+	sent := 0
+	for userID, info := range byUser {
+		subs, err := pushRepo.GetByUserID(ctx, userID)
+		if err != nil || len(subs) == 0 {
+			continue
+		}
+		body := "明日のシフト: " + strings.Join(info.slots, " / ")
+		sender.SendAll(subs, "シフトリマインド", body, "/")
+		sent++
+	}
+	log.Printf("daily reminder: %s 分のリマインドを %d 人に送信", tomorrow, sent)
 }

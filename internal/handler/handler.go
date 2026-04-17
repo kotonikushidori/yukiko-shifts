@@ -701,3 +701,105 @@ func (h *LockHandler) Unlock(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"locked": false})
 }
+
+// ============================================================
+// PushHandler
+// ============================================================
+
+// PushSender は push.Sender のインターフェース（nil 安全）
+type PushSender interface {
+	PublicKey() string
+	SendAll(subs []model.PushSubscription, title, body, url string)
+}
+
+type PushHandler struct {
+	pushRepo *repository.PushRepository
+	userRepo *repository.UserRepository
+	sender   PushSender
+}
+
+func NewPushHandler(pushRepo *repository.PushRepository, userRepo *repository.UserRepository, sender PushSender) *PushHandler {
+	return &PushHandler{pushRepo: pushRepo, userRepo: userRepo, sender: sender}
+}
+
+// GET /api/push/vapid-key — 公開鍵をフロントエンドに渡す
+func (h *PushHandler) GetVapidKey(w http.ResponseWriter, r *http.Request) {
+	if h.sender == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"public_key": ""})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"public_key": h.sender.PublicKey()})
+}
+
+// POST /api/push/subscribe — サブスクリプション登録
+func (h *PushHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
+	tenantID := currentTenantID(r)
+	userID   := currentUserID(r)
+
+	var req model.PushSubscribeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Endpoint == "" {
+		writeError(w, http.StatusBadRequest, "不正なサブスクリプション")
+		return
+	}
+	if err := h.pushRepo.Upsert(r.Context(), tenantID, userID, req.Endpoint, req.P256dh, req.Auth); err != nil {
+		writeError(w, http.StatusInternalServerError, "登録エラー")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DELETE /api/push/subscribe — サブスクリプション削除
+func (h *PushHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	var req model.PushSubscribeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Endpoint == "" {
+		writeError(w, http.StatusBadRequest, "endpoint が必要です")
+		return
+	}
+	if err := h.pushRepo.Delete(r.Context(), userID, req.Endpoint); err != nil {
+		writeError(w, http.StatusInternalServerError, "削除エラー")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/push/hope-submit — 作業者が希望提出 → 管理者に通知
+func (h *PushHandler) HopeSubmit(w http.ResponseWriter, r *http.Request) {
+	if h.sender == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	tenantID := currentTenantID(r)
+	userID   := currentUserID(r)
+
+	var req model.PushHopeSubmitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Year == 0 || req.Month == 0 {
+		writeError(w, http.StatusBadRequest, "year/month が必要です")
+		return
+	}
+
+	// 提出者の名前を取得
+	u, err := h.userRepo.FindByID(r.Context(), tenantID, userID)
+	if err != nil || u == nil {
+		writeError(w, http.StatusInternalServerError, "ユーザー取得エラー")
+		return
+	}
+	workerName := u.Name
+	if u.LastName != nil {
+		workerName = *u.LastName
+		if u.FirstName != nil {
+			workerName += " " + *u.FirstName
+		}
+	}
+
+	// 管理者のサブスクリプションを取得して通知
+	subs, err := h.pushRepo.GetByRole(r.Context(), tenantID, string(model.RoleAdmin))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "通知先取得エラー")
+		return
+	}
+	title := "希望提出完了"
+	body  := workerName + " が " + strconv.Itoa(req.Year) + "年" + strconv.Itoa(req.Month) + "月分の希望を提出しました"
+	h.sender.SendAll(subs, title, body, "/")
+	w.WriteHeader(http.StatusNoContent)
+}

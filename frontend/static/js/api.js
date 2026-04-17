@@ -122,6 +122,43 @@ export function apiUpdateSiteClient(year, month, siteId, clientName) {
   });
 }
 
+// ─── Web Push ────────────────────────────────────────────────
+
+// GET /api/push/vapid-key
+export function apiGetVapidKey() {
+  return request('/api/push/vapid-key');
+}
+
+// POST /api/push/subscribe
+export function apiSubscribePush(subJson) {
+  // subJson は PushSubscription.toJSON() の結果
+  // { endpoint, keys: { p256dh, auth } } の形式
+  return request('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({
+      endpoint: subJson.endpoint,
+      p256dh:   subJson.keys?.p256dh ?? '',
+      auth:     subJson.keys?.auth   ?? '',
+    }),
+  });
+}
+
+// DELETE /api/push/subscribe
+export function apiUnsubscribePush(endpoint) {
+  return request('/api/push/subscribe', {
+    method: 'DELETE',
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
+// POST /api/push/hope-submit
+export function apiHopeSubmit(year, month) {
+  return request('/api/push/hope-submit', {
+    method: 'POST',
+    body: JSON.stringify({ year, month }),
+  });
+}
+
 // ─── シフトロック ─────────────────────────────────────────────
 
 // GET /api/shifts/lock?year=Y&month=M

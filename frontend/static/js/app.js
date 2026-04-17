@@ -5,6 +5,7 @@ import { initBoard } from './board.js';
 import { initSites } from './sites.js';
 import { initWorker } from './worker.js';
 import { initWorkers } from './workers.js';
+import { initPush, clearPush } from './push.js';
 
 // ─── Auth helpers ─────────────────────────────────────────────
 function getToken() { return localStorage.getItem('shift_token'); }
@@ -75,6 +76,7 @@ function renderLogin(errMsg = '') {
       saveAuth(token, user);
       currentPage = 'board';
       renderApp();
+      initPush(); // ログイン後にプッシュ購読を登録（許可ダイアログ）
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.add('visible');
@@ -126,6 +128,7 @@ function renderApp() {
     </div>`;
 
   document.getElementById('logout-btn').addEventListener('click', () => {
+    clearPush().catch(() => {}); // サブスクリプション削除（失敗しても無視）
     clearAuth();
     renderLogin();
   });
@@ -177,6 +180,7 @@ function renderContent() {
 // ─── Bootstrap ───────────────────────────────────────────────
 if (getToken()) {
   renderApp();
+  initPush(); // ページリロード時も購読を維持
 } else {
   renderLogin();
 }
