@@ -436,10 +436,21 @@ function navDate(dir) {
 }
 
 function bindCells() {
+  // ＋ボタン → 一括設定モーダルを開く
   document.querySelectorAll('.btn-add-assign').forEach(btn => {
-    btn.addEventListener('click', () => openAddModal(Number(btn.dataset.site), btn.dataset.date, null));
+    btn.addEventListener('click', () =>
+      openBulkModal(Number(btn.dataset.site), btn.dataset.date));
   });
 
+  // 週表示バッジ・カンバンカード本体クリック → 同じく一括設定モーダル
+  document.querySelectorAll('.week-badge, .kanban-card').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.badge-del, .kcard-del')) return; // 削除ボタンは別処理
+      openBulkModal(Number(el.dataset.siteId), el.dataset.date);
+    });
+  });
+
+  // 削除ボタン（バッジ内）
   document.querySelectorAll('.badge-del, .kcard-del').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();
@@ -527,117 +538,197 @@ function bindDrag() {
   });
 }
 
-// ─── Add Assignment Modal ─────────────────────────────────────
-let _modalCtx = null;
+// ─── Bulk Assignment Modal ───────────────────────────────────
+// 現場×日付に対して複数作業者を一括設定するモーダル
+let _bulkSlot = 'AM';
 
-function openAddModal(siteId, date, presetSlot) {
-  _modalCtx = { siteId, date, slot: presetSlot ?? 'AM' };
-
-  const siteName = st.siteMap[siteId] ?? `現場 #${siteId}`;
+function dateFmt(date) {
   const [y, m, d] = date.split('-');
-  const dateDisp  = `${y}年${parseInt(m)}月${parseInt(d)}日`;
+  return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+}
 
-  const workerEntries = Object.entries(st.workerMap);
-  let workerInput;
-  if (workerEntries.length > 0) {
-    const opts = workerEntries.map(([id, name]) =>
-      `<option value="${id}">${escHtml(name)}</option>`
-    ).join('');
-    workerInput = `
-      <select class="form-select" id="modal-worker">
-        <option value="">-- 作業者を選択 --</option>
-        ${opts}
-      </select>`;
-  } else {
-    workerInput = `
-      <input type="number" class="form-control" id="modal-worker"
-        placeholder="作業者 ID を入力（例: 4）" min="1">
-      <p style="font-size:12px;color:#64748b;margin-top:4px">
-        ※ボード上にデータがないため直接IDを入力してください
-      </p>`;
-  }
+// 指定セルの現在のアサイン一覧を返す
+function cellAssigns(siteId, date) {
+  return st.assignments.filter(a =>
+    Number(a.site_id) === Number(siteId) && parseWorkDate(a.work_date) === date
+  );
+}
 
-  const slotBtns = ['AM', 'PM', 'ALL'].map(s => {
-    const active = s === _modalCtx.slot ? 'active' : '';
-    return `<button class="slot-opt ${active}" data-slot="${s}">${s}</button>`;
-  }).join('');
+// モーダルのメインコンテンツ HTML を組み立てる（再描画にも使用）
+function buildBulkBody(siteId, date) {
+  const current = cellAssigns(siteId, date);
+  const assignedIds = new Set(current.map(a => Number(a.user_id)));
+
+  // 現在のアサイン
+  const currentHTML = current.length === 0
+    ? `<p class="bulk-empty">まだアサインがありません</p>`
+    : current.map(a => {
+        const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
+        const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
+        return `
+          <div class="bulk-assign-row">
+            <span class="badge ${cls} bulk-badge">${a.time_slot}</span>
+            <span class="bulk-assign-name">${name}</span>
+            <button class="bulk-del" data-assign-id="${a.id}" title="削除">×</button>
+          </div>`;
+      }).join('');
+
+  // 追加できる作業者（いずれかのスロットでアサイン済みの人を除く）
+  const available = st.workers.filter(w => !assignedIds.has(Number(w.id)));
+  const workerListHTML = available.length === 0
+    ? `<p class="bulk-empty">全員アサイン済みです</p>`
+    : available.map(w => {
+        const name = escHtml(st.workerDispMap[w.id] ?? w.name);
+        return `
+          <label class="bulk-worker-row">
+            <input type="checkbox" class="bulk-check" value="${w.id}">
+            <span class="bulk-worker-name">${name}</span>
+          </label>`;
+      }).join('');
+
+  const slotBtns = ['AM', 'PM', 'ALL'].map(s =>
+    `<button class="slot-opt${s === _bulkSlot ? ' active' : ''}" data-slot="${s}">${s}</button>`
+  ).join('');
+
+  return `
+    <div class="bulk-section">
+      <div class="bulk-section-label">現在のアサイン</div>
+      <div class="bulk-current-list" id="bulk-current">${currentHTML}</div>
+    </div>
+    <div class="bulk-section">
+      <div class="bulk-section-label">作業者を追加</div>
+      <div class="bulk-slot-row">
+        <span class="bulk-slot-label">時間帯</span>
+        <div class="slot-group" id="bulk-slot-group">${slotBtns}</div>
+      </div>
+      <div class="bulk-worker-list" id="bulk-worker-list">${workerListHTML}</div>
+    </div>
+    <div class="modal-error" id="bulk-err"></div>`;
+}
+
+function openBulkModal(siteId, date) {
+  // 既存モーダルがあれば閉じる
+  document.getElementById('bulk-modal')?.remove();
+
+  const siteName = st.siteMap[siteId] ?? `現場#${siteId}`;
 
   const el = document.createElement('div');
   el.className = 'modal-overlay';
-  el.id = 'add-modal';
+  el.id = 'bulk-modal';
   el.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal bulk-modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <span class="modal-title">アサイン追加</span>
-        <button class="modal-close" id="modal-close">×</button>
+        <span class="modal-title">${escHtml(siteName)}</span>
+        <span class="bulk-modal-date">${dateFmt(date)}</span>
+        <button class="modal-close" id="bulk-close">×</button>
       </div>
-      <div class="modal-body">
-        <div class="modal-info-box">
-          <strong>${escHtml(siteName)}</strong> &nbsp;/&nbsp; ${dateDisp}
-        </div>
-        <div class="form-group">
-          <label>作業者</label>
-          ${workerInput}
-        </div>
-        <div class="form-group">
-          <label>時間帯</label>
-          <div class="slot-group">${slotBtns}</div>
-        </div>
-        <div class="modal-error" id="modal-err"></div>
+      <div class="modal-body" id="bulk-body">
+        ${buildBulkBody(siteId, date)}
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="modal-cancel">キャンセル</button>
-        <button class="btn btn-primary" id="modal-submit" style="width:auto">追 加</button>
+        <button class="btn btn-secondary" id="bulk-cancel">閉じる</button>
+        <button class="btn btn-primary" id="bulk-submit">選択した作業者を追加</button>
       </div>
     </div>`;
 
   document.body.appendChild(el);
+  bindBulkModal(el, siteId, date, siteName);
+}
 
-  const close = () => { document.getElementById('add-modal')?.remove(); _modalCtx = null; };
+function bindBulkModal(el, siteId, date, siteName) {
+  const close = () => { el.remove(); };
 
-  el.querySelector('#modal-close').addEventListener('click', close);
-  el.querySelector('#modal-cancel').addEventListener('click', close);
+  el.querySelector('#bulk-close').addEventListener('click', close);
+  el.querySelector('#bulk-cancel').addEventListener('click', close);
   el.addEventListener('click', e => { if (e.target === el) close(); });
 
+  // 時間帯切替
   el.querySelectorAll('.slot-opt').forEach(btn => {
     btn.addEventListener('click', () => {
+      _bulkSlot = btn.dataset.slot;
       el.querySelectorAll('.slot-opt').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      _modalCtx.slot = btn.dataset.slot;
     });
   });
 
-  el.querySelector('#modal-submit').addEventListener('click', () => submitAdd(close));
+  // 個別削除ボタン
+  bindBulkDeletes(el, siteId, date, siteName);
+
+  // 一括追加ボタン
+  el.querySelector('#bulk-submit').addEventListener('click', () =>
+    bulkSubmit(el, siteId, date, siteName));
 }
 
-async function submitAdd(close) {
-  const workerEl  = document.getElementById('modal-worker');
-  const errEl     = document.getElementById('modal-err');
-  const submitBtn = document.getElementById('modal-submit');
+// 個別削除ボタンのバインド（再描画後も呼ばれる）
+function bindBulkDeletes(el, siteId, date, siteName) {
+  el.querySelectorAll('.bulk-del').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id = Number(btn.dataset.assignId);
+      btn.disabled = true;
+      try {
+        await apiDeleteAssign(id);
+        st.assignments = st.assignments.filter(a => a.id !== id);
+        refreshBulkBody(el, siteId, date, siteName);
+        renderAll(); // ボード側も更新
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false;
+      }
+    });
+  });
+}
 
-  errEl.classList.remove('visible');
+// モーダルのボディのみ再描画（モーダルを閉じない）
+function refreshBulkBody(el, siteId, date, siteName) {
+  el.querySelector('#bulk-body').innerHTML = buildBulkBody(siteId, date);
+  // 再バインド
+  el.querySelectorAll('.slot-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _bulkSlot = btn.dataset.slot;
+      el.querySelectorAll('.slot-opt').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+  bindBulkDeletes(el, siteId, date, siteName);
+  el.querySelector('#bulk-submit').addEventListener('click', () =>
+    bulkSubmit(el, siteId, date, siteName));
+}
 
-  const userId = parseInt(workerEl.value, 10);
-  if (!userId || Number.isNaN(userId)) {
-    errEl.textContent = '作業者を選択または入力してください';
+async function bulkSubmit(el, siteId, date, siteName) {
+  const errEl     = el.querySelector('#bulk-err');
+  const submitBtn = el.querySelector('#bulk-submit');
+
+  const checked = [...el.querySelectorAll('.bulk-check:checked')];
+  if (checked.length === 0) {
+    errEl.textContent = '作業者を1人以上選んでください';
     errEl.classList.add('visible');
     return;
   }
 
-  submitBtn.disabled = true;
+  submitBtn.disabled    = true;
   submitBtn.textContent = '追加中…';
+  errEl.classList.remove('visible');
 
-  try {
-    await apiCreateAssign(_modalCtx.siteId, _modalCtx.date, userId, _modalCtx.slot);
-    close();
-    showToast('アサインを追加しました', 'success');
-    await loadBoard({ silent: true });
-  } catch (err) {
-    errEl.textContent = err.message;
+  const results = await Promise.allSettled(
+    checked.map(cb => apiCreateAssign(Number(siteId), date, Number(cb.value), _bulkSlot))
+  );
+
+  const failed  = results.filter(r => r.status === 'rejected');
+  const success = results.filter(r => r.status === 'fulfilled').length;
+
+  if (failed.length > 0) {
+    errEl.textContent = failed.map(r => r.reason.message).join(' / ');
     errEl.classList.add('visible');
-    submitBtn.disabled = false;
-    submitBtn.textContent = '追 加';
   }
+  if (success > 0) {
+    showToast(`${success}名を追加しました`, 'success');
+    await loadBoard({ silent: true });          // データ再取得
+    refreshBulkBody(el, siteId, date, siteName); // モーダル内を更新
+  }
+
+  submitBtn.disabled    = false;
+  submitBtn.textContent = '選択した作業者を追加';
 }
 
 // ─── Toast ───────────────────────────────────────────────────
