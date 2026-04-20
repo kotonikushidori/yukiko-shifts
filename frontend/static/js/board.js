@@ -11,15 +11,16 @@ const st = {
   viewMode: 'week',
   currentDate: new Date(),
   assignments: [],
-  siteList: [],      // GET /api/sites から取得した全現場
-  siteMap: {},       // { siteId: siteName }
-  workerMap: {},     // { userId: userName (フルネーム) }
-  workerDispMap: {}, // { userId: 表示名（苗字 or 苗字+頭文字） }
-  workers: [],       // 作業者マスタ全件
-  foremanMap: {},    // { "siteId_date": ForemanAssignment }
+  siteList: [],        // GET /api/sites から取得した全現場
+  siteMap: {},         // { siteId: siteName }
+  workerMap: {},       // { userId: userName (フルネーム) }
+  workerDispMap: {},   // { userId: 表示名（苗字 or 苗字+頭文字） }
+  workers: [],         // 作業者マスタ全件
+  foremanMap: {},      // { "siteId_date": ForemanAssignment }
+  foremanQualSet: new Set(), // 職長資格保持者の userId セット
   locked: false,
   loading: false,
-  readOnly: false,   // 作業者閲覧モード（編集UI非表示）
+  readOnly: false,     // 作業者閲覧モード（編集UI非表示）
 };
 
 // ─── Worker Display Names ────────────────────────────────────
@@ -164,6 +165,8 @@ export async function loadBoard({ silent = false } = {}) {
         : w.name;
     }
     st.workerDispMap = buildWorkerDisplayNames(st.workers);
+    // 職長資格セット構築
+    st.foremanQualSet = new Set(st.workers.filter(w => w.is_foreman_qualified).map(w => w.id));
     // 職長マップ構築
     st.foremanMap = {};
     for (const fa of (foremanAssigns ?? [])) {
@@ -184,11 +187,12 @@ const SLOT_CLS = { AM: 'badge-am', PM: 'badge-pm', ALL: 'badge-all' };
 
 /** カンバン用カード（1日表示） */
 function renderKanbanCard(a) {
-  const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
-  const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
-  const date = parseWorkDate(a.work_date);
-  const isForeman = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
-  const delBtn = st.readOnly ? '' : `<button class="kcard-del" data-id="${a.id}" title="削除">×</button>`;
+  const cls     = SLOT_CLS[a.time_slot] ?? 'badge-am';
+  const name    = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
+  const date    = parseWorkDate(a.work_date);
+  const isForeman  = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
+  const isQualified = st.foremanQualSet.has(a.user_id);
+  const delBtn  = st.readOnly ? '' : `<button class="kcard-del" data-id="${a.id}" title="削除">×</button>`;
   return `
     <div class="kanban-card ${cls}${isForeman ? ' is-foreman' : ''}"
          ${st.readOnly ? '' : 'draggable="true"'}
@@ -198,7 +202,7 @@ function renderKanbanCard(a) {
          data-site-id="${a.site_id}"
          data-date="${date}">
       <span class="kcard-slot">${a.time_slot}</span>
-      ${isForeman ? '<span class="kcard-foreman-badge">職長</span>' : ''}
+      ${isForeman ? '<span class="kcard-foreman-badge">職長</span>' : (isQualified ? '<span class="kcard-qual-badge" title="職長資格あり">★</span>' : '')}
       <span class="kcard-name">${name}</span>
       ${delBtn}
     </div>`;
@@ -206,11 +210,15 @@ function renderKanbanCard(a) {
 
 /** 週表示用バッジ（ドラッグ可能） */
 function renderWeekBadge(a) {
-  const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
-  const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
-  const date = parseWorkDate(a.work_date);
-  const isForeman = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
-  const delBtn = st.readOnly ? '' : `<button class="badge-del" data-id="${a.id}" title="削除">×</button>`;
+  const cls      = SLOT_CLS[a.time_slot] ?? 'badge-am';
+  const name     = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
+  const date     = parseWorkDate(a.work_date);
+  const isForeman   = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
+  const isQualified = st.foremanQualSet.has(a.user_id);
+  const delBtn   = st.readOnly ? '' : `<button class="badge-del" data-id="${a.id}" title="削除">×</button>`;
+  const qualMark = isForeman
+    ? '<span class="week-foreman-badge">職</span>'
+    : (isQualified ? '<span class="week-qual-badge" title="職長資格あり">★</span>' : '');
   return `
     <span class="badge week-badge ${cls}${isForeman ? ' is-foreman' : ''}"
           ${st.readOnly ? '' : 'draggable="true"'}
@@ -219,9 +227,9 @@ function renderWeekBadge(a) {
           data-slot="${a.time_slot}"
           data-site-id="${a.site_id}"
           data-date="${date}"
-          title="${name}（${a.time_slot}）${isForeman ? '（職長）' : ''}">
+          title="${name}（${a.time_slot}）${isForeman ? '（職長アサイン済み）' : (isQualified ? '（職長資格あり）' : '')}">
       <span class="badge-slot-label">${a.time_slot}</span>
-      ${isForeman ? '<span class="week-foreman-badge">職</span>' : ''}
+      ${qualMark}
       ${name}
       ${delBtn}
     </span>`;
@@ -624,11 +632,13 @@ function buildBulkBody(siteId, date) {
   const workerListHTML = available.length === 0
     ? `<p class="bulk-empty">全員アサイン済みです</p>`
     : available.map(w => {
-        const name = escHtml(st.workerDispMap[w.id] ?? w.name);
+        const name    = escHtml(st.workerDispMap[w.id] ?? w.name);
+        const qualBadge = st.foremanQualSet.has(w.id)
+          ? `<span class="bulk-qual-badge" title="職長資格あり">★</span>` : '';
         return `
           <label class="bulk-worker-row">
             <input type="checkbox" class="bulk-check" value="${w.id}">
-            <span class="bulk-worker-name">${name}</span>
+            ${qualBadge}<span class="bulk-worker-name">${name}</span>
           </label>`;
       }).join('');
 
@@ -984,9 +994,10 @@ function renderUnassignedWeekRow(dates) {
     if (unassigned.length === 0) {
       return `<td class="ua-week-cell"><span class="ua-all-ok">全員</span></td>`;
     }
-    const chips = unassigned.map(w =>
-      `<span class="ua-chip">${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`
-    ).join('');
+    const chips = unassigned.map(w => {
+      const qual = st.foremanQualSet.has(w.id) ? `<span class="ua-qual-badge">★</span>` : '';
+      return `<span class="ua-chip">${qual}${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`;
+    }).join('');
     return `<td class="ua-week-cell">${chips}</td>`;
   }).join('');
 
@@ -1015,9 +1026,10 @@ function renderUnassignedKanbanSection(dateStr) {
       </div>`;
   }
 
-  const chips = unassigned.map(w =>
-    `<span class="ua-chip">${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`
-  ).join('');
+  const chips = unassigned.map(w => {
+    const qual = st.foremanQualSet.has(w.id) ? `<span class="ua-qual-badge">★</span>` : '';
+    return `<span class="ua-chip">${qual}${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`;
+  }).join('');
 
   return `
     <div class="ua-kanban-section">
