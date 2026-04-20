@@ -1,7 +1,9 @@
 // board.js — 管理者シフトボード
 
 import { apiGetBoard, apiGetSites, apiCreateAssign, apiDeleteAssign,
-         apiGetLockStatus, apiLockMonth, apiUnlockMonth, apiGetWorkers } from './api.js';
+         apiGetLockStatus, apiLockMonth, apiUnlockMonth, apiGetWorkers,
+         apiGetForemanAssignments, apiUpsertForemanAssignment,
+         apiGetForemanSuggestions } from './api.js';
 import { HOLIDAYS } from './holidays.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -9,13 +11,15 @@ const st = {
   viewMode: 'week',
   currentDate: new Date(),
   assignments: [],
-  siteList: [],     // GET /api/sites から取得した全現場
-  siteMap: {},      // { siteId: siteName }
-  workerMap: {},    // { userId: userName (フルネーム) }
-  workerDispMap: {},// { userId: 表示名（苗字 or 苗字+頭文字） }
-  workers: [],      // 作業者マスタ全件
+  siteList: [],      // GET /api/sites から取得した全現場
+  siteMap: {},       // { siteId: siteName }
+  workerMap: {},     // { userId: userName (フルネーム) }
+  workerDispMap: {}, // { userId: 表示名（苗字 or 苗字+頭文字） }
+  workers: [],       // 作業者マスタ全件
+  foremanMap: {},    // { "siteId_date": ForemanAssignment }
   locked: false,
   loading: false,
+  readOnly: false,   // 作業者閲覧モード（編集UI非表示）
 };
 
 // ─── Worker Display Names ────────────────────────────────────
@@ -138,11 +142,12 @@ export async function loadBoard({ silent = false } = {}) {
     : st.currentDate.getMonth() + 1;
 
   try {
-    const [assignments, sites, lockData, workers] = await Promise.all([
+    const [assignments, sites, lockData, workers, foremanAssigns] = await Promise.all([
       apiGetBoard(from, to),
       apiGetSites().catch(() => []),
       apiGetLockStatus(lockY, lockM).catch(() => ({ locked: false })),
       apiGetWorkers().catch(() => []),
+      apiGetForemanAssignments(from, to).catch(() => []),
     ]);
     st.assignments = assignments ?? [];
     st.siteList    = sites ?? [];
@@ -159,6 +164,12 @@ export async function loadBoard({ silent = false } = {}) {
         : w.name;
     }
     st.workerDispMap = buildWorkerDisplayNames(st.workers);
+    // 職長マップ構築
+    st.foremanMap = {};
+    for (const fa of (foremanAssigns ?? [])) {
+      const key = `${fa.site_id}_${String(fa.work_date).substring(0, 10)}`;
+      st.foremanMap[key] = fa;
+    }
   } catch (e) {
     showToast('データ取得エラー: ' + e.message, 'error');
     st.assignments = [];
@@ -176,16 +187,20 @@ function renderKanbanCard(a) {
   const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
   const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date = parseWorkDate(a.work_date);
+  const isForeman = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
+  const delBtn = st.readOnly ? '' : `<button class="kcard-del" data-id="${a.id}" title="削除">×</button>`;
   return `
-    <div class="kanban-card ${cls}" draggable="true"
+    <div class="kanban-card ${cls}${isForeman ? ' is-foreman' : ''}"
+         ${st.readOnly ? '' : 'draggable="true"'}
          data-assign-id="${a.id}"
          data-user-id="${a.user_id}"
          data-slot="${a.time_slot}"
          data-site-id="${a.site_id}"
          data-date="${date}">
       <span class="kcard-slot">${a.time_slot}</span>
+      ${isForeman ? '<span class="kcard-foreman-badge">職長</span>' : ''}
       <span class="kcard-name">${name}</span>
-      <button class="kcard-del" data-id="${a.id}" title="削除">×</button>
+      ${delBtn}
     </div>`;
 }
 
@@ -194,17 +209,21 @@ function renderWeekBadge(a) {
   const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
   const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date = parseWorkDate(a.work_date);
+  const isForeman = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
+  const delBtn = st.readOnly ? '' : `<button class="badge-del" data-id="${a.id}" title="削除">×</button>`;
   return `
-    <span class="badge week-badge ${cls}" draggable="true"
+    <span class="badge week-badge ${cls}${isForeman ? ' is-foreman' : ''}"
+          ${st.readOnly ? '' : 'draggable="true"'}
           data-assign-id="${a.id}"
           data-user-id="${a.user_id}"
           data-slot="${a.time_slot}"
           data-site-id="${a.site_id}"
           data-date="${date}"
-          title="${name}（${a.time_slot}）">
+          title="${name}（${a.time_slot}）${isForeman ? '（職長）' : ''}">
       <span class="badge-slot-label">${a.time_slot}</span>
+      ${isForeman ? '<span class="week-foreman-badge">職</span>' : ''}
       ${name}
-      <button class="badge-del" data-id="${a.id}" title="削除">×</button>
+      ${delBtn}
     </span>`;
 }
 
@@ -235,7 +254,8 @@ function renderKanban() {
         <div class="empty-state-icon">📋</div>
         <h2>この日のシフトデータがありません</h2>
         <p>現場マスタに稼働中の現場を登録してください</p>
-      </div>`;
+      </div>
+      ${renderUnassignedKanbanSection(dateStr)}`;
   }
 
   const cols = sites.map(site => {
@@ -243,23 +263,27 @@ function renderKanban() {
     const group = grouped[sid];
     const cards = group ? group.cards.map(renderKanbanCard).join('') : '';
     const count = group ? group.cards.length : 0;
+    const addBtn = st.readOnly ? '' : `
+        <div class="kanban-col-footer">
+          <button class="btn-add-assign" data-site="${sid}" data-date="${dateStr}"
+                  title="アサイン追加">＋ 追加</button>
+        </div>`;
     return `
       <div class="kanban-col">
         <div class="kanban-col-header">
           <span class="kanban-col-name">${escHtml(site.name)}</span>
           <span class="kanban-col-count">${count}名</span>
         </div>
-        <div class="kanban-drop-zone" data-site-id="${sid}" data-date="${dateStr}">
+        <div class="${st.readOnly ? 'kanban-drop-zone-ro' : 'kanban-drop-zone'}"
+             data-site-id="${sid}" data-date="${dateStr}">
           ${cards}
         </div>
-        <div class="kanban-col-footer">
-          <button class="btn-add-assign" data-site="${sid}" data-date="${dateStr}"
-                  title="アサイン追加">＋ 追加</button>
-        </div>
+        ${addBtn}
       </div>`;
   }).join('');
 
-  return `<div class="kanban-board">${cols}</div>`;
+  return `<div class="kanban-board">${cols}</div>
+${renderUnassignedKanbanSection(dateStr)}`;
 }
 
 // ─── Week View ────────────────────────────────────────────────
@@ -290,7 +314,7 @@ function renderWeekTable() {
     const nextDay = new Date(d);
     nextDay.setDate(d.getDate() + 1);
     const nextDs = fmtDate(nextDay);
-    const copyBtn = !st.locked
+    const copyBtn = (!st.locked && !st.readOnly)
       ? `<button class="btn-copy-date" data-from="${ds}" data-to="${nextDs}"
              title="${fmtMonthDay(d)} のシフトを ${fmtMonthDay(nextDay)} にコピー">翌日→</button>`
       : '';
@@ -310,7 +334,7 @@ function renderWeekTable() {
         <h2>シフトデータがありません</h2>
         <p>+ ボタンでアサインを追加してください</p>
       </div>
-    </td></tr>`;
+    </td></tr>` + renderUnassignedWeekRow(dates);
   } else {
     rows = siteIds.map(sid => {
       const siteName = st.siteMap[sid] ?? `現場#${sid}`;
@@ -320,9 +344,10 @@ function renderWeekTable() {
         const assigns = siteData?.days[ds] ?? [];
         const isToday = ds === today;
         const badges  = assigns.map(renderWeekBadge).join('');
-        const addBtn  = `<button class="btn-add-assign" data-site="${sid}" data-date="${ds}" title="追加">+</button>`;
+        const addBtn  = st.readOnly ? '' : `<button class="btn-add-assign" data-site="${sid}" data-date="${ds}" title="追加">+</button>`;
         return `<td class="${isToday ? 'col-today' : ''}">
-          <div class="cell-content week-drop-zone" data-site-id="${sid}" data-date="${ds}">
+          <div class="cell-content ${st.readOnly ? 'week-drop-zone-ro' : 'week-drop-zone'}"
+               data-site-id="${sid}" data-date="${ds}">
             ${badges}${addBtn}
           </div>
         </td>`;
@@ -334,7 +359,7 @@ function renderWeekTable() {
         </td>
         ${cells}
       </tr>`;
-    }).join('');
+    }).join('') + renderUnassignedWeekRow(dates);
   }
 
   return `
@@ -370,9 +395,11 @@ function renderToolbar() {
       </div>
       <button class="btn-today" id="btn-today">今日</button>
       <div class="toolbar-space"></div>
-      ${st.locked
-        ? `<button class="btn-lock active" id="btn-lock" title="ロック解除">🔒 確定済み</button>`
-        : `<button class="btn-lock" id="btn-lock" title="この月の希望入力を締め切る">🔓 ロック</button>`
+      ${st.readOnly
+        ? (st.locked ? `<span class="lock-status-badge">🔒 確定済み</span>` : '')
+        : (st.locked
+            ? `<button class="btn-lock active" id="btn-lock" title="ロック解除">🔒 確定済み</button>`
+            : `<button class="btn-lock" id="btn-lock" title="この月の希望入力を締め切る">🔓 ロック</button>`)
       }
     </div>`;
 }
@@ -425,12 +452,10 @@ function bindToolbar() {
         if (!confirm(`${y}年${m}月のロックを解除しますか？`)) return;
         await apiUnlockMonth(y, m);
         showToast(`${m}月のロックを解除しました`, 'success');
+        loadBoard();
       } else {
-        if (!confirm(`${y}年${m}月の希望入力を締め切り（ロック）しますか？`)) return;
-        await apiLockMonth(y, m);
-        showToast(`${m}月をロックしました`, 'success');
+        openForemanLockModal(y, m);
       }
-      loadBoard();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -445,6 +470,8 @@ function navDate(dir) {
 }
 
 function bindCells() {
+  if (st.readOnly) return; // 作業者閲覧モード: 編集操作をすべてスキップ
+
   // 翌日コピーボタン
   document.querySelectorAll('.btn-copy-date').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -486,6 +513,8 @@ function bindCells() {
 
 // ─── Drag & Drop ─────────────────────────────────────────────
 function bindDrag() {
+  if (st.readOnly) return; // 作業者閲覧モード: DnD 無効
+
   // カンバンカード
   document.querySelectorAll('.kanban-card[draggable]').forEach(card => {
     card.addEventListener('dragstart', e => {
@@ -782,6 +811,148 @@ async function copyDateShifts(fromDate, toDate) {
   }
 }
 
+// ─── Foreman Lock Modal ──────────────────────────────────────
+// ロック前に職長自動提案を確認・修正するモーダル
+async function openForemanLockModal(year, month) {
+  // 既存モーダルがあれば閉じる
+  document.getElementById('foreman-lock-modal')?.remove();
+
+  // ローディング状態のモーダルを表示
+  const el = document.createElement('div');
+  el.className = 'modal-overlay';
+  el.id = 'foreman-lock-modal';
+  el.innerHTML = `
+    <div class="modal modal-lg foreman-lock-modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <span class="modal-title">${year}年${month}月 職長確認</span>
+        <button class="modal-close" id="flm-close">×</button>
+      </div>
+      <div class="modal-body" id="flm-body">
+        <div class="loading-screen"><div class="spinner"></div></div>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+
+  const closeModal = () => el.remove();
+  el.querySelector('#flm-close').addEventListener('click', closeModal);
+  el.addEventListener('click', e => { if (e.target === el) closeModal(); });
+
+  // 職長提案を取得
+  let suggestions;
+  try {
+    suggestions = await apiGetForemanSuggestions(year, month);
+  } catch (e) {
+    closeModal();
+    showToast('職長データ取得エラー: ' + e.message, 'error');
+    return;
+  }
+
+  if (suggestions.length === 0) {
+    // シフトアサインがない月はそのままロック
+    el.querySelector('#flm-body').innerHTML = `
+      <p class="flm-info">この月にシフトアサインがないため、職長設定は不要です。</p>`;
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    footer.innerHTML = `
+      <button class="btn btn-secondary" id="flm-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="flm-confirm">ロックする</button>`;
+    el.querySelector('.foreman-lock-modal').appendChild(footer);
+    el.querySelector('#flm-cancel').addEventListener('click', closeModal);
+    el.querySelector('#flm-confirm').addEventListener('click', async () => {
+      try {
+        await apiLockMonth(year, month);
+        closeModal();
+        showToast(`${month}月をロックしました`, 'success');
+        loadBoard();
+      } catch (err) { showToast(err.message, 'error'); }
+    });
+    return;
+  }
+
+  const alertCount = suggestions.filter(s => s.has_alert).length;
+
+  const alertBanner = alertCount > 0
+    ? `<div class="flm-alert-banner">⚠ ${alertCount}件で職長資格者が見つかりません。職長未定の行は手動で設定するか、現場の職長優先順位を設定してください。</div>`
+    : `<div class="flm-ok-banner">✓ 全${suggestions.length}件で職長が自動設定されます</div>`;
+
+  const rows = suggestions.map(s => {
+    const [, sm, sd] = s.work_date.split('-');
+    const dateDisp = `${parseInt(sm)}/${parseInt(sd)}`;
+    const alertIcon = s.has_alert ? '<span class="flm-warn">⚠</span>' : '';
+    const manualIcon = s.is_manual ? '<span class="flm-manual">手動</span>' : '';
+
+    const options = [
+      `<option value="">— 未設定 —</option>`,
+      ...(s.candidates ?? []).map(c => {
+        const selected = s.user_id != null && s.user_id == c.user_id ? 'selected' : '';
+        return `<option value="${c.user_id}" ${selected}>${escHtml(c.user_name)}</option>`;
+      }),
+    ].join('');
+
+    return `
+      <tr class="${s.has_alert ? 'flm-row-alert' : ''}">
+        <td class="flm-td-date">${dateDisp}</td>
+        <td class="flm-td-site">${escHtml(s.site_name)}</td>
+        <td class="flm-td-foreman">
+          ${alertIcon}${manualIcon}
+          <select class="form-select flm-select"
+                  data-site-id="${s.site_id}"
+                  data-work-date="${s.work_date}">
+            ${options}
+          </select>
+        </td>
+      </tr>`;
+  }).join('');
+
+  el.querySelector('#flm-body').innerHTML = `
+    ${alertBanner}
+    <div class="flm-table-wrap">
+      <table class="flm-table">
+        <thead><tr><th>日付</th><th>現場</th><th>職長</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  footer.innerHTML = `
+    <button class="btn btn-secondary" id="flm-cancel">キャンセル</button>
+    <button class="btn btn-primary" id="flm-confirm">確認してロック</button>`;
+  el.querySelector('.foreman-lock-modal').appendChild(footer);
+
+  el.querySelector('#flm-cancel').addEventListener('click', closeModal);
+  el.querySelector('#flm-confirm').addEventListener('click', async () => {
+    const btn = el.querySelector('#flm-confirm');
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+
+    // 各行のセレクト値を職長アサインとして保存（値があるもののみ）
+    const saves = [];
+    el.querySelectorAll('.flm-select').forEach(sel => {
+      if (sel.value) {
+        saves.push(apiUpsertForemanAssignment(
+          Number(sel.dataset.siteId),
+          sel.dataset.workDate,
+          Number(sel.value),
+          false, // 自動提案（手動フラグなし）
+        ));
+      }
+    });
+
+    try {
+      await Promise.allSettled(saves);
+      await apiLockMonth(year, month);
+      closeModal();
+      showToast(`${month}月をロックしました`, 'success');
+      loadBoard();
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = '確認してロック';
+    }
+  });
+}
+
 // ─── Toast ───────────────────────────────────────────────────
 export function showToast(message, type = 'success') {
   let container = document.querySelector('.toast-container');
@@ -798,7 +969,68 @@ export function showToast(message, type = 'success') {
   setTimeout(() => toast.remove(), 3500);
 }
 
+// ─── Unassigned Workers Section ──────────────────────────────
+// 週表示用: アサインのない作業者を1行にまとめて表示
+function renderUnassignedWeekRow(dates) {
+  if (st.workers.length === 0) return '';
+
+  const cells = dates.map(d => {
+    const ds = fmtDate(d);
+    const assignedIds = new Set(
+      st.assignments.filter(a => parseWorkDate(a.work_date) === ds).map(a => a.user_id)
+    );
+    const unassigned = st.workers.filter(w => !assignedIds.has(w.id));
+
+    if (unassigned.length === 0) {
+      return `<td class="ua-week-cell"><span class="ua-all-ok">全員</span></td>`;
+    }
+    const chips = unassigned.map(w =>
+      `<span class="ua-chip">${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`
+    ).join('');
+    return `<td class="ua-week-cell">${chips}</td>`;
+  }).join('');
+
+  return `
+    <tr class="row-unassigned">
+      <td class="ua-label-cell">
+        <span class="ua-label">未アサイン</span>
+      </td>
+      ${cells}
+    </tr>`;
+}
+
+// 1日表示（カンバン）用: アサインのない作業者セクション
+function renderUnassignedKanbanSection(dateStr) {
+  if (st.workers.length === 0) return '';
+
+  const assignedIds = new Set(
+    st.assignments.filter(a => parseWorkDate(a.work_date) === dateStr).map(a => a.user_id)
+  );
+  const unassigned = st.workers.filter(w => !assignedIds.has(w.id));
+
+  if (unassigned.length === 0) {
+    return `
+      <div class="ua-kanban-section">
+        <span class="ua-all-ok">本日は全員アサイン済みです</span>
+      </div>`;
+  }
+
+  const chips = unassigned.map(w =>
+    `<span class="ua-chip">${escHtml(st.workerDispMap[w.id] ?? w.name)}</span>`
+  ).join('');
+
+  return `
+    <div class="ua-kanban-section">
+      <div class="ua-kanban-header">
+        <span class="ua-label">未アサイン</span>
+        <span class="ua-count">${unassigned.length}名</span>
+      </div>
+      <div class="ua-chips">${chips}</div>
+    </div>`;
+}
+
 // ─── Init ─────────────────────────────────────────────────────
-export function initBoard() {
+export function initBoard({ readOnly = false } = {}) {
+  st.readOnly = readOnly;
   loadBoard();
 }

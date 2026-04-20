@@ -146,15 +146,16 @@ func (h *ShiftHandler) CreateWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	fullName := req.LastName + req.FirstName
 	id, err := h.userRepo.Create(r.Context(), model.User{
-		TenantID:     currentTenantID(r),
-		EmployeeID:   req.EmployeeID,
-		Name:         fullName,
-		LastName:     &req.LastName,
-		FirstName:    &req.FirstName,
-		PasswordHash: string(hash),
-		Role:         model.RoleWorker,
-		Phone:        req.Phone,
-		Status:       "active",
+		TenantID:           currentTenantID(r),
+		EmployeeID:         req.EmployeeID,
+		Name:               fullName,
+		LastName:           &req.LastName,
+		FirstName:          &req.FirstName,
+		PasswordHash:       string(hash),
+		Role:               model.RoleWorker,
+		Phone:              req.Phone,
+		Status:             "active",
+		IsForemanQualified: req.IsForemanQualified,
 	})
 	if err != nil {
 		writeError(w, http.StatusConflict, "社員IDが既に使用されています")
@@ -187,12 +188,13 @@ func (h *ShiftHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	fullName := req.LastName + req.FirstName
 	if err := h.userRepo.Update(r.Context(), model.User{
-		ID:        id,
-		TenantID:  tenantID,
-		Name:      fullName,
-		LastName:  &req.LastName,
-		FirstName: &req.FirstName,
-		Phone:     req.Phone,
+		ID:                 id,
+		TenantID:           tenantID,
+		Name:               fullName,
+		LastName:           &req.LastName,
+		FirstName:          &req.FirstName,
+		Phone:              req.Phone,
+		IsForemanQualified: req.IsForemanQualified,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "更新エラー")
 		return

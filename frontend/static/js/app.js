@@ -98,14 +98,15 @@ function renderApp() {
   const isAdmin   = user.role === 'admin';
   const roleLabel = isAdmin ? '管理者' : '作業者';
 
-  // 作業者はマイシフト画面をデフォルトに
-  if (!isAdmin && currentPage !== 'worker') currentPage = 'worker';
+  // 作業者はマイシフト・シフトボード以外には遷移させない
+  if (!isAdmin && currentPage !== 'worker' && currentPage !== 'board') currentPage = 'worker';
 
   const navItems = isAdmin
     ? `<button class="nav-item" data-page="board">📅 シフトボード</button>
        <button class="nav-item" data-page="sites">🏗 現場マスタ</button>
        <button class="nav-item" data-page="workers">👷 作業者管理</button>`
-    : `<button class="nav-item" data-page="worker">📋 マイシフト</button>`;
+    : `<button class="nav-item" data-page="worker">📋 マイシフト</button>
+       <button class="nav-item" data-page="board">📅 シフトボード</button>`;
 
   document.getElementById('app').innerHTML = `
     <div class="app-wrapper">
@@ -154,7 +155,8 @@ function renderContent() {
       <div id="board-root"
            style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
       </div>`;
-    initBoard();
+    const boardUser = getUser();
+    initBoard({ readOnly: boardUser?.role !== 'admin' });
   } else if (currentPage === 'sites') {
     root.innerHTML = `
       <div id="sites-root"

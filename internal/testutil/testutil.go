@@ -32,19 +32,20 @@ func NewDB(t *testing.T) *sqlx.DB {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE TABLE users (
-			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
-			employee_id   TEXT    NOT NULL,
-			email         TEXT,
-			password_hash TEXT    NOT NULL DEFAULT '',
-			name          TEXT    NOT NULL,
-			last_name     TEXT,
-			first_name    TEXT,
-			role          TEXT    NOT NULL DEFAULT 'worker',
-			phone         TEXT,
-			status        TEXT    NOT NULL DEFAULT 'active',
-			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+			tenant_id            INTEGER NOT NULL REFERENCES tenants(id),
+			employee_id          TEXT    NOT NULL,
+			email                TEXT,
+			password_hash        TEXT    NOT NULL DEFAULT '',
+			name                 TEXT    NOT NULL,
+			last_name            TEXT,
+			first_name           TEXT,
+			role                 TEXT    NOT NULL DEFAULT 'worker',
+			phone                TEXT,
+			status               TEXT    NOT NULL DEFAULT 'active',
+			is_foreman_qualified INTEGER NOT NULL DEFAULT 0,
+			created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(tenant_id, employee_id)
 		);
 		CREATE TABLE sites (
@@ -82,6 +83,23 @@ func NewDB(t *testing.T) *sqlx.DB {
 			auth_key   TEXT    NOT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(user_id, endpoint)
+		);
+		CREATE TABLE site_foreman_priorities (
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			site_id        INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+			user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			priority_order INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(site_id, user_id)
+		);
+		CREATE TABLE foreman_assignments (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			tenant_id  INTEGER NOT NULL REFERENCES tenants(id),
+			site_id    INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+			work_date  TEXT    NOT NULL,
+			user_id    INTEGER NOT NULL REFERENCES users(id),
+			is_manual  INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(site_id, work_date)
 		);
 
 		-- テスト用初期データ

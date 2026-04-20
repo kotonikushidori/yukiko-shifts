@@ -65,17 +65,19 @@ func main() {
 	siteRepo   := repository.NewSiteRepository(db)
 	lockRepo   := repository.NewLockRepository(db)
 	pushRepo   := repository.NewPushRepository(db)
+	foremanRepo := repository.NewForemanRepository(db)
 	shiftVal   := validator.New(shiftRepo)
 
 	// プッシュ送信者（キー未設定なら nil → 全送信がno-op）
 	pushSender := push.NewSender(vapidPrivateKey, vapidPublicKey)
 
-	authH   := handler.NewAuthHandler(userRepo, tokenAuth)
-	shiftH  := handler.NewShiftHandler(shiftRepo, userRepo, shiftVal)
-	reportH := handler.NewDailyReportHandler(reportRepo)
-	siteH   := handler.NewSiteHandler(siteRepo)
-	lockH   := handler.NewLockHandler(lockRepo)
-	pushH   := handler.NewPushHandler(pushRepo, userRepo, pushSender)
+	authH    := handler.NewAuthHandler(userRepo, tokenAuth)
+	shiftH   := handler.NewShiftHandler(shiftRepo, userRepo, shiftVal)
+	reportH  := handler.NewDailyReportHandler(reportRepo)
+	siteH    := handler.NewSiteHandler(siteRepo)
+	lockH    := handler.NewLockHandler(lockRepo)
+	pushH    := handler.NewPushHandler(pushRepo, userRepo, pushSender)
+	foremanH := handler.NewForemanHandler(foremanRepo, shiftRepo)
 
 	// 毎日 19:00 JST に翌日シフトのリマインドを送信
 	go startDailyReminder(db, pushRepo, pushSender)
@@ -134,6 +136,18 @@ func main() {
 		r.Post("/api/push/subscribe",   pushH.Subscribe)
 		r.Delete("/api/push/subscribe", pushH.Unsubscribe)
 		r.Post("/api/push/hope-submit", pushH.HopeSubmit)
+
+		// 職長優先順位（現場別）
+		r.Get("/api/sites/{siteID}/foreman-priorities", foremanH.GetPriorities)
+		r.Put("/api/sites/{siteID}/foreman-priorities", handler.RequireAdmin(foremanH.SetPriorities))
+
+		// 職長アサイン
+		r.Get("/api/foreman/assignments",    foremanH.GetAssignments)
+		r.Put("/api/foreman/assignments",    handler.RequireAdmin(foremanH.UpsertAssignment))
+		r.Delete("/api/foreman/assignments", handler.RequireAdmin(foremanH.DeleteAssignment))
+
+		// 職長自動提案（ロック時確認用）
+		r.Get("/api/foreman/suggest", handler.RequireAdmin(foremanH.Suggest))
 	})
 
 	// SPAフォールバック

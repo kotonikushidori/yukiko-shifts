@@ -44,19 +44,20 @@ const (
 // User
 // ──────────────────────────────────────
 type User struct {
-	ID           int64     `db:"id"           json:"id"`
-	TenantID     int64     `db:"tenant_id"    json:"tenant_id"`
-	EmployeeID   string    `db:"employee_id"  json:"employee_id"`
-	Email        *string   `db:"email"        json:"email,omitempty"`
-	PasswordHash string    `db:"password_hash" json:"-"`
-	Name         string    `db:"name"         json:"name"`
-	LastName     *string   `db:"last_name"    json:"last_name,omitempty"`
-	FirstName    *string   `db:"first_name"   json:"first_name,omitempty"`
-	Role         Role      `db:"role"         json:"role"`
-	Phone        *string   `db:"phone"        json:"phone,omitempty"`
-	Status       string    `db:"status"       json:"status"`
-	CreatedAt    time.Time `db:"created_at"   json:"created_at"`
-	UpdatedAt    time.Time `db:"updated_at"   json:"updated_at"`
+	ID                  int64     `db:"id"                    json:"id"`
+	TenantID            int64     `db:"tenant_id"             json:"tenant_id"`
+	EmployeeID          string    `db:"employee_id"           json:"employee_id"`
+	Email               *string   `db:"email"                 json:"email,omitempty"`
+	PasswordHash        string    `db:"password_hash"         json:"-"`
+	Name                string    `db:"name"                  json:"name"`
+	LastName            *string   `db:"last_name"             json:"last_name,omitempty"`
+	FirstName           *string   `db:"first_name"            json:"first_name,omitempty"`
+	Role                Role      `db:"role"                  json:"role"`
+	Phone               *string   `db:"phone"                 json:"phone,omitempty"`
+	Status              string    `db:"status"                json:"status"`
+	IsForemanQualified  bool      `db:"is_foreman_qualified"  json:"is_foreman_qualified"`
+	CreatedAt           time.Time `db:"created_at"            json:"created_at"`
+	UpdatedAt           time.Time `db:"updated_at"            json:"updated_at"`
 }
 
 // ──────────────────────────────────────
@@ -179,11 +180,12 @@ type AssignRequest struct {
 }
 
 type WorkerUpsertRequest struct {
-	EmployeeID string  `json:"employee_id"`
-	LastName   string  `json:"last_name"`
-	FirstName  string  `json:"first_name"`
-	Password   string  `json:"password,omitempty"` // 新規時必須、更新時は省略可
-	Phone      *string `json:"phone,omitempty"`
+	EmployeeID         string  `json:"employee_id"`
+	LastName           string  `json:"last_name"`
+	FirstName          string  `json:"first_name"`
+	Password           string  `json:"password,omitempty"` // 新規時必須、更新時は省略可
+	Phone              *string `json:"phone,omitempty"`
+	IsForemanQualified bool    `json:"is_foreman_qualified"`
 }
 
 type DailyReportUpsertRequest struct {
@@ -232,6 +234,50 @@ type PushSubscribeRequest struct {
 type PushHopeSubmitRequest struct {
 	Year  int `json:"year"`
 	Month int `json:"month"`
+}
+
+// ──────────────────────────────────────
+// Foreman（職長）
+// ──────────────────────────────────────
+
+// ForemanPriority は現場ごとの職長候補優先順位
+type ForemanPriority struct {
+	ID            int64  `db:"id"             json:"id"`
+	SiteID        int64  `db:"site_id"        json:"site_id"`
+	UserID        int64  `db:"user_id"        json:"user_id"`
+	PriorityOrder int    `db:"priority_order" json:"priority_order"`
+	UserName      string `db:"user_name"      json:"user_name,omitempty"`
+}
+
+// ForemanAssignment は職長確定アサイン
+type ForemanAssignment struct {
+	ID       int64  `db:"id"        json:"id"`
+	TenantID int64  `db:"tenant_id" json:"-"`
+	SiteID   int64  `db:"site_id"   json:"site_id"`
+	WorkDate string `db:"work_date" json:"work_date"`
+	UserID   int64  `db:"user_id"   json:"user_id"`
+	IsManual bool   `db:"is_manual" json:"is_manual"`
+	// JOINで取得
+	UserName string `db:"user_name" json:"user_name,omitempty"`
+	SiteName string `db:"site_name" json:"site_name,omitempty"`
+}
+
+// ForemanCandidate は職長資格あり・その日その現場に出勤予定の作業者
+type ForemanCandidate struct {
+	UserID   int64  `json:"user_id"`
+	UserName string `json:"user_name"`
+}
+
+// ForemanSuggestion はロック時確認モーダル用の1行
+type ForemanSuggestion struct {
+	SiteID     int64              `json:"site_id"`
+	SiteName   string             `json:"site_name"`
+	WorkDate   string             `json:"work_date"`
+	UserID     *int64             `json:"user_id"`   // nil = 職長未定
+	UserName   string             `json:"user_name"`
+	IsManual   bool               `json:"is_manual"`
+	HasAlert   bool               `json:"has_alert"` // 職長未定の場合 true
+	Candidates []ForemanCandidate `json:"candidates"`
 }
 
 // ──────────────────────────────────────

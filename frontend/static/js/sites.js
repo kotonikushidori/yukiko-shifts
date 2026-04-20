@@ -1,6 +1,7 @@
 // sites.js — 現場マスタ CRUD 画面
 
-import { apiGetSites, apiCreateSite, apiUpdateSite } from './api.js';
+import { apiGetSites, apiCreateSite, apiUpdateSite,
+         apiGetForemanPriorities, apiSetForemanPriorities, apiGetWorkers } from './api.js';
 
 // ─── State ───────────────────────────────────────────────────
 const st = {
@@ -191,6 +192,13 @@ function openModal(site) {
             <textarea class="form-control" id="sm-note" rows="3"
               placeholder="補足情報があれば入力">${escHtml(site?.note ?? '')}</textarea>
           </div>
+          ${isEdit ? `
+          <div class="form-group form-col-full">
+            <label>職長優先順位 <span class="sm-hint">（1位が最優先で自動アサイン）</span></label>
+            <div id="sm-foreman-section">
+              <div class="sm-fp-loading">読み込み中…</div>
+            </div>
+          </div>` : ''}
         </div>
         <div class="modal-error" id="sm-err"></div>
       </div>
@@ -231,6 +239,114 @@ function openModal(site) {
   });
 
   document.getElementById('sm-name').focus();
+
+  // 編集モーダルの場合: 職長優先順位セクションを非同期ロード
+  if (isEdit) {
+    loadForemanPriorities(site.id);
+  }
+}
+
+// ─── Foreman Priority Section ────────────────────────────────
+async function loadForemanPriorities(siteId) {
+  const sec = document.getElementById('sm-foreman-section');
+  if (!sec) return;
+
+  try {
+    const [priorities, workers] = await Promise.all([
+      apiGetForemanPriorities(siteId).catch(() => []),
+      apiGetWorkers().catch(() => []),
+    ]);
+
+    // 職長資格ありの作業者だけ対象
+    const qualified = (workers ?? []).filter(w => w.is_foreman_qualified);
+    const priorityUserIds = new Set((priorities ?? []).map(p => p.user_id));
+    const available = qualified.filter(w => !priorityUserIds.has(w.id));
+
+    renderForemanSection(sec, siteId, priorities ?? [], available);
+  } catch (e) {
+    sec.innerHTML = `<p class="sm-fp-error">読み込みエラー: ${escHtml(e.message)}</p>`;
+  }
+}
+
+function renderForemanSection(sec, siteId, priorities, available) {
+  const listHTML = priorities.length === 0
+    ? `<p class="sm-fp-empty">優先順位未設定</p>`
+    : priorities.map((p, i) => `
+        <div class="sm-fp-row" data-user-id="${p.user_id}">
+          <span class="sm-fp-rank">${i + 1}</span>
+          <span class="sm-fp-name">${escHtml(p.user_name || `ID:${p.user_id}`)}</span>
+          <div class="sm-fp-actions">
+            ${i > 0
+              ? `<button class="sm-fp-btn" data-action="up" data-idx="${i}" title="優先度を上げる">↑</button>`
+              : '<span class="sm-fp-btn-placeholder"></span>'}
+            ${i < priorities.length - 1
+              ? `<button class="sm-fp-btn" data-action="down" data-idx="${i}" title="優先度を下げる">↓</button>`
+              : '<span class="sm-fp-btn-placeholder"></span>'}
+            <button class="sm-fp-btn sm-fp-remove" data-action="remove" data-idx="${i}" title="削除">×</button>
+          </div>
+        </div>`).join('');
+
+  const addHTML = available.length > 0 ? `
+    <div class="sm-fp-add-row">
+      <select class="form-select sm-fp-select" id="sm-fp-add-sel">
+        <option value="">— 追加する職長を選択 —</option>
+        ${available.map(w => `<option value="${w.id}">${escHtml(w.last_name && w.first_name ? w.last_name + ' ' + w.first_name : w.name)}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm btn-secondary" id="sm-fp-add-btn">追加</button>
+    </div>` : '';
+
+  sec.innerHTML = `
+    <div class="sm-fp-list" id="sm-fp-list">${listHTML}</div>
+    ${addHTML}
+    <div class="sm-fp-footer">
+      <button class="btn btn-sm btn-primary" id="sm-fp-save">職長優先順位を保存</button>
+    </div>`;
+
+  // up/down/remove ボタン
+  sec.querySelectorAll('.sm-fp-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.action;
+      const idx    = Number(btn.dataset.idx);
+      if (action === 'up' && idx > 0) {
+        [priorities[idx - 1], priorities[idx]] = [priorities[idx], priorities[idx - 1]];
+      } else if (action === 'down' && idx < priorities.length - 1) {
+        [priorities[idx], priorities[idx + 1]] = [priorities[idx + 1], priorities[idx]];
+      } else if (action === 'remove') {
+        const removed = priorities.splice(idx, 1)[0];
+        available.push({ id: removed.user_id, name: removed.user_name });
+      }
+      renderForemanSection(sec, siteId, priorities, available);
+    });
+  });
+
+  // 追加ボタン
+  document.getElementById('sm-fp-add-btn')?.addEventListener('click', () => {
+    const sel = document.getElementById('sm-fp-add-sel');
+    const uid = Number(sel.value);
+    if (!uid) return;
+    const w = available.find(w => w.id === uid);
+    if (!w) return;
+    priorities.push({ user_id: uid, user_name: w.name || w.last_name || '' });
+    available.splice(available.indexOf(w), 1);
+    renderForemanSection(sec, siteId, priorities, available);
+  });
+
+  // 保存ボタン
+  document.getElementById('sm-fp-save')?.addEventListener('click', async () => {
+    const saveBtn = document.getElementById('sm-fp-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await apiSetForemanPriorities(siteId, priorities.map((p, i) => ({
+        user_id: p.user_id, priority_order: i,
+      })));
+      showToast('職長優先順位を保存しました', 'success');
+    } catch (e) {
+      showToast('保存エラー: ' + e.message, 'error');
+    }
+    saveBtn.disabled = false;
+    saveBtn.textContent = '職長優先順位を保存';
+  });
 }
 
 function buildPayload() {

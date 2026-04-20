@@ -351,11 +351,12 @@ func (r *UserRepository) Create(ctx context.Context, u model.User) (int64, error
 func (r *UserRepository) Update(ctx context.Context, u model.User) error {
 	const q = `
 		UPDATE users SET
-			name        = :name,
-			last_name   = :last_name,
-			first_name  = :first_name,
-			phone       = :phone,
-			updated_at  = CURRENT_TIMESTAMP
+			name                 = :name,
+			last_name            = :last_name,
+			first_name           = :first_name,
+			phone                = :phone,
+			is_foreman_qualified = :is_foreman_qualified,
+			updated_at           = CURRENT_TIMESTAMP
 		WHERE id = :id AND tenant_id = :tenant_id`
 	_, err := r.db.NamedExecContext(ctx, q, u)
 	return err

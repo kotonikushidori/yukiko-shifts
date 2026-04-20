@@ -24,11 +24,14 @@ function render(root) {
   const rows = _workers.map(w => {
     const ln = w.last_name  ?? '';
     const fn = w.first_name ?? '';
+    const foremanBadge = w.is_foreman_qualified
+      ? `<span class="wm-foreman-badge">職長</span>` : '';
     return `
       <tr>
         <td>${escHtml(w.employee_id)}</td>
         <td>${escHtml(ln)}</td>
         <td>${escHtml(fn)}</td>
+        <td>${foremanBadge}</td>
         <td>${escHtml(w.phone ?? '—')}</td>
         <td>
           <button class="wm-edit-btn btn btn-sm" data-id="${w.id}">編集</button>
@@ -44,7 +47,7 @@ function render(root) {
       </div>
       <table class="wm-table">
         <thead>
-          <tr><th>社員ID</th><th>苗字</th><th>名前</th><th>電話</th><th></th></tr>
+          <tr><th>社員ID</th><th>苗字</th><th>名前</th><th>職長</th><th>電話</th><th></th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -105,6 +108,13 @@ function openModal(worker) {
         <input id="wm-pw" class="form-control" type="password"
           placeholder="${isNew ? 'パスワードを入力' : '変更する場合のみ入力'}">
       </div>
+      <div class="wm-field">
+        <label class="wm-check-label">
+          <input type="checkbox" id="wm-foreman"
+            ${worker?.is_foreman_qualified ? 'checked' : ''}>
+          職長資格あり
+        </label>
+      </div>
       <div class="wm-error" id="wm-err" style="display:none"></div>
     </div>
     <div class="wm-modal-footer">
@@ -147,7 +157,11 @@ async function saveWorker() {
   errEl.style.display = 'none';
 
   try {
-    const data = { employee_id: empId, last_name: lastName, first_name: firstName, phone };
+    const isForemanQualified = document.getElementById('wm-foreman')?.checked ?? false;
+    const data = {
+      employee_id: empId, last_name: lastName, first_name: firstName,
+      phone, is_foreman_qualified: isForemanQualified,
+    };
     if (password) data.password = password;
 
     if (isNew) {

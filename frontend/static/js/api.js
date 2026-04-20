@@ -181,3 +181,41 @@ export function apiUnlockMonth(year, month) {
     body: JSON.stringify({ year, month }),
   });
 }
+
+// ─── 職長 ─────────────────────────────────────────────────────
+
+// GET /api/sites/{siteID}/foreman-priorities
+export function apiGetForemanPriorities(siteId) {
+  return request(`/api/sites/${siteId}/foreman-priorities`);
+}
+
+// PUT /api/sites/{siteID}/foreman-priorities
+export function apiSetForemanPriorities(siteId, items) {
+  return request(`/api/sites/${siteId}/foreman-priorities`, {
+    method: 'PUT',
+    body: JSON.stringify(items),
+  });
+}
+
+// GET /api/foreman/assignments?from=&to=
+export function apiGetForemanAssignments(from, to) {
+  return request(`/api/foreman/assignments?from=${from}&to=${to}`);
+}
+
+// PUT /api/foreman/assignments
+export function apiUpsertForemanAssignment(siteId, workDate, userId, isManual) {
+  return request('/api/foreman/assignments', {
+    method: 'PUT',
+    body: JSON.stringify({ site_id: siteId, work_date: workDate, user_id: userId, is_manual: isManual }),
+  });
+}
+
+// DELETE /api/foreman/assignments
+export function apiDeleteForemanAssignment(siteId, workDate) {
+  return request(`/api/foreman/assignments?site_id=${siteId}&work_date=${workDate}`, { method: 'DELETE' });
+}
+
+// GET /api/foreman/suggest?year=&month=
+export function apiGetForemanSuggestions(year, month) {
+  return request(`/api/foreman/suggest?year=${year}&month=${month}`);
+}
