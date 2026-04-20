@@ -1989,3 +1989,25 @@ textarea.form-control {
   vertical-align: middle;
   margin-right: 2px;
 }
+
+/* ─── 現場マスタ: 職長設定列 ─────────────────────────────────── */
+.td-foreman {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.fp-unset {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.fp-name {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.fp-extra {
+  color: #64748b;
+  font-size: 11px;
+  margin-left: 2px;
+}

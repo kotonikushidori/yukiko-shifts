@@ -6,6 +6,7 @@ import { apiGetSites, apiCreateSite, apiUpdateSite,
 // ─── State ───────────────────────────────────────────────────
 const st = {
   sites: [],
+  foremanPriorityMap: {}, // { siteId: [ForemanPriority] }
   loading: false,
 };
 
@@ -45,12 +46,33 @@ async function loadSites() {
   render();
   try {
     st.sites = await apiGetSites() ?? [];
+    // 全現場の職長優先順位を並行取得
+    const results = await Promise.allSettled(
+      st.sites.map(s => apiGetForemanPriorities(s.id))
+    );
+    st.foremanPriorityMap = {};
+    st.sites.forEach((s, i) => {
+      st.foremanPriorityMap[s.id] = results[i].status === 'fulfilled'
+        ? (results[i].value ?? []) : [];
+    });
   } catch (e) {
     showToast('データ取得エラー: ' + e.message, 'error');
     st.sites = [];
   }
   st.loading = false;
   render();
+}
+
+// 職長設定列の表示テキスト生成
+function fmtForemanPriority(priorities) {
+  if (!priorities || priorities.length === 0) {
+    return `<span class="fp-unset">未設定</span>`;
+  }
+  const first = escHtml(priorities[0].user_name ?? '—');
+  if (priorities.length === 1) {
+    return `<span class="fp-name">${first}</span>`;
+  }
+  return `<span class="fp-name">${first}</span><span class="fp-extra">…他${priorities.length - 1}名</span>`;
 }
 
 // ─── Render ─────────────────────────────────────────────────
@@ -68,7 +90,7 @@ function render() {
   }
 
   const rows = st.sites.length === 0
-    ? `<tr><td colspan="7">
+    ? `<tr><td colspan="8">
         <div class="empty-state">
           <div class="empty-state-icon">🏗</div>
           <h2>現場データがありません</h2>
@@ -86,6 +108,7 @@ function render() {
           <td class="td-date">${fmtDate(site.start_date)}</td>
           <td class="td-date">${fmtDate(site.end_date)}</td>
           <td class="td-budget">${fmtBudget(site.budget_yen)}</td>
+          <td class="td-foreman">${fmtForemanPriority(st.foremanPriorityMap[site.id])}</td>
           <td class="td-status">
             <span class="badge-status ${statusClass(site.status)}">${statusLabel(site.status)}</span>
           </td>
@@ -112,6 +135,7 @@ function render() {
             <th>開始日</th>
             <th>終了日</th>
             <th>予算</th>
+            <th>職長設定</th>
             <th>状態</th>
             <th></th>
           </tr>
@@ -340,6 +364,9 @@ function renderForemanSection(sec, siteId, priorities, available) {
       await apiSetForemanPriorities(siteId, priorities.map((p, i) => ({
         user_id: p.user_id, priority_order: i,
       })));
+      // 一覧の職長設定列をリアルタイム更新
+      st.foremanPriorityMap[siteId] = priorities;
+      render();
       showToast('職長優先順位を保存しました', 'success');
     } catch (e) {
       showToast('保存エラー: ' + e.message, 'error');
