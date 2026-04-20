@@ -2011,3 +2011,90 @@ textarea.form-control {
   font-size: 11px;
   margin-left: 2px;
 }
+
+/* ─── 一括アサインモーダル: 検索＋チップ選択 UI ─────────────── */
+
+/* 検索入力欄 */
+.bulk-search-wrap {
+  margin: 8px 0 6px;
+}
+.bulk-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px 6px 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 8px center;
+  outline: none;
+  transition: border-color .15s;
+}
+.bulk-search:focus {
+  border-color: #6366f1;
+  background-color: #fff;
+}
+
+/* チップクラウド */
+.bulk-chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+}
+
+/* 個別チップ */
+.bulk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
+}
+.bulk-chip:hover {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #4338ca;
+}
+.bulk-chip.selected {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+.bulk-chip.selected .chip-qual {
+  color: #fde68a;
+}
+
+/* チップ内の職長資格 ★ */
+.chip-qual {
+  font-size: 10px;
+  color: #b45309;
+  line-height: 1;
+}
+
+/* 選択中カウント（セクションラベル横） */
+.bulk-sel-count {
+  display: none;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4f46e5;
+  background: #eef2ff;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.bulk-sel-count.visible {
+  display: inline-block;
+}
+
+/* 旧チェックボックスリストの名残を非表示（チップUIに完全移行） */
+.bulk-worker-list { display: none; }
