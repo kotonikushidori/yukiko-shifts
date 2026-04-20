@@ -286,10 +286,19 @@ function renderWeekTable() {
       d.getDay() === 0 || holidayName  ? 'col-sun' : '',
       holidayName      ? 'col-holiday' : '',
     ].filter(Boolean).join(' ');
+    // 翌日の日付を計算（週の範囲外でも可）
+    const nextDay = new Date(d);
+    nextDay.setDate(d.getDate() + 1);
+    const nextDs = fmtDate(nextDay);
+    const copyBtn = !st.locked
+      ? `<button class="btn-copy-date" data-from="${ds}" data-to="${nextDs}"
+             title="${fmtMonthDay(d)} のシフトを ${fmtMonthDay(nextDay)} にコピー">翌日→</button>`
+      : '';
     return `<th class="${cls}">
       <span class="day-date">${fmtMonthDay(d)}</span>
       <span class="day-dow">（${dow}）</span>
       ${holidayName ? `<span class="day-holiday">${escHtml(holidayName)}</span>` : ''}
+      ${copyBtn}
     </th>`;
   }).join('');
 
@@ -436,6 +445,14 @@ function navDate(dir) {
 }
 
 function bindCells() {
+  // 翌日コピーボタン
+  document.querySelectorAll('.btn-copy-date').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      copyDateShifts(btn.dataset.from, btn.dataset.to);
+    });
+  });
+
   // ＋ボタン → 一括設定モーダルを開く
   document.querySelectorAll('.btn-add-assign').forEach(btn => {
     btn.addEventListener('click', () =>
@@ -729,6 +746,40 @@ async function bulkSubmit(el, siteId, date, siteName) {
 
   submitBtn.disabled    = false;
   submitBtn.textContent = '選択した作業者を追加';
+}
+
+// ─── Copy Date Shifts ────────────────────────────────────────
+async function copyDateShifts(fromDate, toDate) {
+  const assigns = st.assignments.filter(a => parseWorkDate(a.work_date) === fromDate);
+
+  if (assigns.length === 0) {
+    showToast('コピー元にアサインがありません', 'error');
+    return;
+  }
+
+  const [fy, fm, fd] = fromDate.split('-');
+  const [ty, tm, td] = toDate.split('-');
+  const fromDisp = `${parseInt(fm)}/${parseInt(fd)}`;
+  const toDisp   = `${parseInt(tm)}/${parseInt(td)}`;
+
+  if (!confirm(`${fromDisp} の全シフト（${assigns.length}件）を ${toDisp} にコピーしますか？`)) return;
+
+  const results = await Promise.allSettled(
+    assigns.map(a => apiCreateAssign(a.site_id, toDate, a.user_id, a.time_slot))
+  );
+
+  const success = results.filter(r => r.status === 'fulfilled').length;
+  const skipped = results.filter(r => r.status === 'rejected').length; // 重複など
+
+  if (success > 0) {
+    const msg = skipped > 0
+      ? `${success}件コピーしました（${skipped}件は重複のためスキップ）`
+      : `${success}件コピーしました`;
+    showToast(msg, 'success');
+    await loadBoard({ silent: true });
+  } else {
+    showToast('コピーできませんでした（全件が重複または重複エラー）', 'error');
+  }
 }
 
 // ─── Toast ───────────────────────────────────────────────────
