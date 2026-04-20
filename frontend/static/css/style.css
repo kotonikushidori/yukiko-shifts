@@ -2098,3 +2098,92 @@ textarea.form-control {
 
 /* 旧チェックボックスリストの名残を非表示（チップUIに完全移行） */
 .bulk-worker-list { display: none; }
+
+/* ─── カンバン列: 職長行 ─────────────────────────────────────── */
+.kanban-foreman-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 8px;
+  margin: 0;
+  background: #f0f4ff;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  transition: background .12s;
+}
+.kanban-foreman-row:hover { background: #e0e7ff; }
+
+.kfr-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: #4f46e5;
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+.kfr-name  { color: #1e293b; font-weight: 500; }
+.kfr-unset { color: #94a3b8; font-style: italic; }
+
+/* 週バッジ内: 職長バッジをボタン化 */
+button.week-foreman-badge {
+  border: none;
+  cursor: pointer;
+  padding: 0 3px;
+  border-radius: 2px;
+  line-height: inherit;
+  font-size: inherit;
+  font-family: inherit;
+}
+button.week-foreman-badge:hover { filter: brightness(1.15); }
+
+/* ─── 職長変更ポップオーバー ─────────────────────────────────── */
+.foreman-popover {
+  position: fixed;
+  z-index: 9999;
+  width: 240px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fpop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fpop-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.fpop-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #94a3b8;
+  line-height: 1;
+  padding: 0 2px;
+}
+.fpop-close:hover { color: #334155; }
+.fpop-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: -4px;
+}
+.fpop-select { font-size: 13px; }
+.fpop-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}

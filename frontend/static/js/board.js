@@ -3,7 +3,7 @@
 import { apiGetBoard, apiGetSites, apiCreateAssign, apiDeleteAssign,
          apiGetLockStatus, apiLockMonth, apiUnlockMonth, apiGetWorkers,
          apiGetForemanAssignments, apiUpsertForemanAssignment,
-         apiGetForemanSuggestions } from './api.js';
+         apiDeleteForemanAssignment, apiGetForemanSuggestions } from './api.js';
 import { HOLIDAYS } from './holidays.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -217,7 +217,9 @@ function renderWeekBadge(a) {
   const isQualified = st.foremanQualSet.has(a.user_id);
   const delBtn   = st.readOnly ? '' : `<button class="badge-del" data-id="${a.id}" title="削除">×</button>`;
   const qualMark = isForeman
-    ? '<span class="week-foreman-badge">職</span>'
+    ? (st.readOnly
+        ? '<span class="week-foreman-badge">職</span>'
+        : `<button class="week-foreman-badge js-chg-foreman" data-site-id="${a.site_id}" data-date="${date}" title="職長を変更">職</button>`)
     : (isQualified ? '<span class="week-qual-badge" title="職長資格あり">★</span>' : '');
   return `
     <span class="badge week-badge ${cls}${isForeman ? ' is-foreman' : ''}"
@@ -271,6 +273,18 @@ function renderKanban() {
     const group = grouped[sid];
     const cards = group ? group.cards.map(renderKanbanCard).join('') : '';
     const count = group ? group.cards.length : 0;
+    const fa    = st.foremanMap[`${sid}_${dateStr}`];
+    const foremanRow = st.readOnly ? '' : (() => {
+      const fname = fa
+        ? escHtml(st.workerDispMap[fa.user_id] ?? fa.user_name ?? '?')
+        : null;
+      return `<button class="kanban-foreman-row js-chg-foreman"
+                      data-site-id="${sid}" data-date="${dateStr}">
+        ${fa
+          ? `<span class="kfr-label">職長</span><span class="kfr-name">${fname}</span>`
+          : `<span class="kfr-unset">＋ 職長を設定</span>`}
+      </button>`;
+    })();
     const addBtn = st.readOnly ? '' : `
         <div class="kanban-col-footer">
           <button class="btn-add-assign" data-site="${sid}" data-date="${dateStr}"
@@ -282,6 +296,7 @@ function renderKanban() {
           <span class="kanban-col-name">${escHtml(site.name)}</span>
           <span class="kanban-col-count">${count}名</span>
         </div>
+        ${foremanRow}
         <div class="${st.readOnly ? 'kanban-drop-zone-ro' : 'kanban-drop-zone'}"
              data-site-id="${sid}" data-date="${dateStr}">
           ${cards}
@@ -499,6 +514,14 @@ function bindCells() {
     el.addEventListener('click', e => {
       if (e.target.closest('.badge-del, .kcard-del')) return; // 削除ボタンは別処理
       openBulkModal(Number(el.dataset.siteId), el.dataset.date);
+    });
+  });
+
+  // 職長変更ボタン（カンバン行ヘッダー・週バッジ内）
+  document.querySelectorAll('.js-chg-foreman').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openForemanPopover(Number(btn.dataset.siteId), btn.dataset.date, btn);
     });
   });
 
@@ -1016,6 +1039,97 @@ async function openForemanLockModal(year, month) {
       showToast(err.message, 'error');
       btn.disabled = false;
       btn.textContent = '確認してロック';
+    }
+  });
+}
+
+// ─── Foreman Change Popover ──────────────────────────────────
+function openForemanPopover(siteId, dateStr, triggerEl) {
+  document.getElementById('foreman-popover')?.remove();
+
+  // この現場・日付にアサインされている作業者を候補にする
+  const assigned = st.assignments.filter(a =>
+    Number(a.site_id) === siteId && parseWorkDate(a.work_date) === dateStr
+  );
+  // 重複 user_id を除去
+  const seen = new Set();
+  const candidates = assigned.filter(a => {
+    if (seen.has(a.user_id)) return false;
+    seen.add(a.user_id); return true;
+  });
+
+  const currentForeman = st.foremanMap[`${siteId}_${dateStr}`];
+
+  const options = [
+    `<option value="">— 未設定 —</option>`,
+    ...candidates.map(a => {
+      const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
+      const qual = st.foremanQualSet.has(a.user_id) ? ' ★' : '';
+      const sel  = currentForeman?.user_id === a.user_id ? 'selected' : '';
+      return `<option value="${a.user_id}" ${sel}>${name}${qual}</option>`;
+    }),
+  ].join('');
+
+  // ポップオーバーの表示位置を算出
+  const rect = triggerEl.getBoundingClientRect();
+  const top  = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 252);
+
+  const [, m, d] = dateStr.split('-');
+  const siteName  = escHtml(st.siteMap[siteId] ?? `現場#${siteId}`);
+
+  const pop = document.createElement('div');
+  pop.id = 'foreman-popover';
+  pop.className = 'foreman-popover';
+  pop.style.cssText = `top:${top}px;left:${left}px`;
+  pop.innerHTML = `
+    <div class="fpop-header">
+      <span class="fpop-title">職長を変更</span>
+      <button class="fpop-close">×</button>
+    </div>
+    <div class="fpop-meta">${siteName} · ${parseInt(m)}/${parseInt(d)}</div>
+    <select class="form-select fpop-select" id="fpop-sel">${options}</select>
+    <div class="fpop-footer">
+      <button class="btn btn-sm btn-secondary" id="fpop-cancel">キャンセル</button>
+      <button class="btn btn-sm btn-primary"   id="fpop-save">保存</button>
+    </div>`;
+  document.body.appendChild(pop);
+
+  const close = () => pop.remove();
+  pop.querySelector('.fpop-close').addEventListener('click', close);
+  pop.querySelector('#fpop-cancel').addEventListener('click', close);
+
+  // 外側クリックで閉じる
+  const onOutside = e => {
+    if (!pop.contains(e.target) && e.target !== triggerEl) {
+      close();
+      document.removeEventListener('mousedown', onOutside);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', onOutside), 0);
+
+  pop.querySelector('#fpop-save').addEventListener('click', async () => {
+    const saveBtn = pop.querySelector('#fpop-save');
+    const uid     = Number(pop.querySelector('#fpop-sel').value);
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      if (uid) {
+        await apiUpsertForemanAssignment(siteId, dateStr, uid, true);
+        st.foremanMap[`${siteId}_${dateStr}`] = {
+          site_id: siteId, work_date: dateStr, user_id: uid, is_manual: true,
+        };
+      } else {
+        await apiDeleteForemanAssignment(siteId, dateStr);
+        delete st.foremanMap[`${siteId}_${dateStr}`];
+      }
+      showToast('職長を更新しました', 'success');
+      close();
+      renderAll();
+    } catch (err) {
+      showToast(err.message, 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
     }
   });
 }
