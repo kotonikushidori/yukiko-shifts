@@ -1175,7 +1175,7 @@ function renderUnassignedWeekRow(dates) {
   return `
     <tr class="row-unassigned">
       <td class="ua-label-cell">
-        <span class="ua-label">未アサイン</span>
+        <span class="ua-label">休み</span>
       </td>
       ${cells}
     </tr>`;
@@ -1205,7 +1205,7 @@ function renderUnassignedKanbanSection(dateStr) {
   return `
     <div class="ua-kanban-section">
       <div class="ua-kanban-header">
-        <span class="ua-label">未アサイン</span>
+        <span class="ua-label">休み</span>
         <span class="ua-count">${unassigned.length}名</span>
       </div>
       <div class="ua-chips">${chips}</div>
