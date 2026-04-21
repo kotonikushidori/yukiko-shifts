@@ -281,7 +281,8 @@ type ForemanAssignment struct {
 	SiteID   int64  `db:"site_id"   json:"site_id"`
 	WorkDate string `db:"work_date" json:"work_date"`
 	UserID   int64  `db:"user_id"   json:"user_id"`
-	IsManual bool   `db:"is_manual" json:"is_manual"`
+	IsManual  bool      `db:"is_manual"  json:"is_manual"`
+	CreatedAt time.Time `db:"created_at" json:"-"`
 	// JOINで取得
 	UserName string `db:"user_name" json:"user_name,omitempty"`
 	SiteName string `db:"site_name" json:"site_name,omitempty"`
