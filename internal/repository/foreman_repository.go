@@ -117,6 +117,72 @@ func (r *ForemanRepository) SuggestForeman(ctx context.Context, siteID int64, wo
 	return &row.UserID, row.UserName, nil
 }
 
+// IsForeman はユーザーがその日その現場の職長かどうかを確認する
+func (r *ForemanRepository) IsForeman(ctx context.Context, tenantID, siteID int64, workDate string, userID int64) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM foreman_assignments
+		WHERE tenant_id = ? AND site_id = ? AND work_date = ? AND user_id = ?`,
+		tenantID, siteID, workDate, userID).Scan(&count)
+	return count > 0, err
+}
+
+// GetTeamReports はその日その現場に出勤予定の全メンバーと各自の日報データを返す
+func (r *ForemanRepository) GetTeamReports(ctx context.Context, tenantID, siteID int64, workDate string) ([]model.TeamMemberReport, error) {
+	var rows []model.TeamMemberReport
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT
+			sa.user_id,
+			u.name                               AS user_name,
+			COALESCE(dr.man_days,       1.0)     AS man_days,
+			COALESCE(dr.overtime_hours, 0.0)     AS overtime_hours,
+			COALESCE(dr.used_car,       0)       AS used_car,
+			CASE WHEN dr.id IS NOT NULL THEN 1 ELSE 0 END AS has_report
+		FROM (
+			SELECT DISTINCT user_id
+			FROM shift_assignments
+			WHERE tenant_id = ? AND site_id = ? AND work_date = ?
+		) sa
+		JOIN users u ON sa.user_id = u.id
+		LEFT JOIN daily_reports dr
+		  ON dr.user_id   = sa.user_id
+		 AND dr.work_date = ?
+		 AND dr.tenant_id = ?
+		ORDER BY u.name`,
+		tenantID, siteID, workDate, workDate, tenantID)
+	return rows, err
+}
+
+// UpsertTeamReports は職長が担当メンバー全員の日報を一括登録/更新する
+func (r *ForemanRepository) UpsertTeamReports(ctx context.Context, tenantID, siteID int64, workDate string, members []model.TeamMemberPayload) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, m := range members {
+		usedCarInt := 0
+		if m.UsedCar {
+			usedCarInt = 1
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO daily_reports
+				(tenant_id, user_id, work_date, status, site_id, man_days, overtime_hours, used_car, updated_at)
+			VALUES (?, ?, ?, 'present', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(tenant_id, user_id, work_date) DO UPDATE SET
+				man_days       = excluded.man_days,
+				overtime_hours = excluded.overtime_hours,
+				used_car       = excluded.used_car,
+				site_id        = COALESCE(excluded.site_id, daily_reports.site_id),
+				updated_at     = CURRENT_TIMESTAMP`,
+			tenantID, m.UserID, workDate, siteID, m.ManDays, m.OvertimeHours, usedCarInt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // GetQualifiedCandidates は指定現場×日付に出勤予定の職長資格者を返す
 func (r *ForemanRepository) GetQualifiedCandidates(ctx context.Context, siteID int64, workDate string) ([]model.ForemanCandidate, error) {
 	var rows []struct {

@@ -3,6 +3,7 @@
 import {
   apiGetBoard, apiGetMyReports, apiUpsertReport,
   apiGetLockStatus, apiUpdateSiteClient, apiHopeSubmit,
+  apiGetForemanAssignments, apiGetTeamReports, apiUpsertTeamReports,
 } from './api.js';
 import { HOLIDAYS } from './holidays.js';
 
@@ -11,7 +12,8 @@ const st = {
   userId:       null,
   currentMonth: new Date(),
   assignments:  [],
-  reports:      {},   // { 'YYYY-MM-DD': DailyReport }
+  reports:      {},        // { 'YYYY-MM-DD': DailyReport }
+  foremanDates: {},        // { 'YYYY-MM-DD': { site_id, site_name } } 職長担当日
   locked:       false,
   expandedDate: null,
   loading:      false,
@@ -55,10 +57,11 @@ async function load() {
   const to   = fmtYMD(new Date(y, m + 1, 0));
 
   try {
-    const [boardData, reportData, lockData] = await Promise.all([
+    const [boardData, reportData, lockData, foremanData] = await Promise.all([
       apiGetBoard(from, to).catch(() => []),
       apiGetMyReports(y, m + 1).catch(() => ({ reports: [] })),
       apiGetLockStatus(y, m + 1).catch(() => ({ locked: false })),
+      apiGetForemanAssignments(from, to).catch(() => []),
     ]);
 
     st.assignments = (boardData ?? []).filter(a => a.user_id === st.userId);
@@ -67,6 +70,15 @@ async function load() {
     st.reports = {};
     for (const r of (reportData?.reports ?? [])) {
       st.reports[parseDate(r.work_date)] = r;
+    }
+
+    // 自分が職長に設定されている日を抽出
+    st.foremanDates = {};
+    for (const fa of (foremanData ?? [])) {
+      if (fa.user_id === st.userId) {
+        const d = parseDate(fa.work_date);
+        st.foremanDates[d] = { site_id: fa.site_id, site_name: fa.site_name ?? '' };
+      }
     }
   } catch {
     st.assignments = [];
@@ -156,6 +168,16 @@ function renderDayRow(d, today, assignByDate) {
     expanded         ? 'wk-row-expanded': '',
   ].filter(Boolean).join(' ');
 
+  const foremanInfo = st.foremanDates[dateStr];
+  const foremanBtn  = foremanInfo
+    ? `<button class="wk-foreman-btn" data-date="${dateStr}"
+               data-site-id="${foremanInfo.site_id}"
+               data-site-name="${escHtml(foremanInfo.site_name)}"
+               title="職長担当日 - クリックでチーム日報を入力">
+         <span class="wk-foreman-icon">👷</span><span class="wk-foreman-label">職長</span>
+       </button>`
+    : '';
+
   const shiftHtml = assigns.length === 0
     ? `<span class="wk-no-shift">シフトなし</span>`
     : assigns.map(a => `
@@ -188,7 +210,7 @@ function renderDayRow(d, today, assignByDate) {
           <span class="wk-day-dow">${dow}</span>
           ${holiday ? `<span class="wk-holiday-dot" title="${escHtml(holiday)}">祝</span>` : ''}
         </div>
-        <div class="wk-shift-col">${shiftHtml}</div>
+        <div class="wk-shift-col">${shiftHtml}${foremanBtn}</div>
         <div class="wk-hope-col">
           ${lockIcon}
           <div class="wk-hope-group-inline">${hopeButtons}</div>
@@ -381,6 +403,14 @@ function bindRows(root) {
     });
   });
 
+  // 職長ボタン → チーム日報モーダル
+  root.querySelectorAll('.wk-foreman-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openForemanTeamModal(btn.dataset.date, Number(btn.dataset.siteId), btn.dataset.siteName);
+    });
+  });
+
   // 日報ボタン → 展開トグル
   root.querySelectorAll('.wk-report-btn').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -540,6 +570,136 @@ function showToast(message, type = 'success') {
     <span>${escHtml(message)}</span>`;
   c.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+// ─── Foreman Team Report Modal ───────────────────────────────
+async function openForemanTeamModal(dateStr, siteId, siteName) {
+  document.getElementById('ftm-modal')?.remove();
+
+  // ローディングモーダルを先に表示
+  const el = document.createElement('div');
+  el.className = 'modal-overlay';
+  el.id = 'ftm-modal';
+  el.innerHTML = `
+    <div class="modal ftm-modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <span class="modal-title">👷 チーム日報入力</span>
+        <span class="ftm-meta">${escHtml(siteName)} · ${dateStr.slice(5).replace('-', '/')}</span>
+        <button class="modal-close" id="ftm-close">×</button>
+      </div>
+      <div class="modal-body" id="ftm-body">
+        <div class="wk-spinner-wrap"><div class="spinner"></div></div>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+
+  const close = () => el.remove();
+  el.querySelector('#ftm-close').addEventListener('click', close);
+  el.addEventListener('click', e => { if (e.target === el) close(); });
+
+  // メンバーデータ取得
+  let members;
+  try {
+    members = await apiGetTeamReports(siteId, dateStr);
+  } catch (err) {
+    el.querySelector('#ftm-body').innerHTML =
+      `<p class="ftm-error">データ取得エラー: ${escHtml(err.message)}</p>`;
+    return;
+  }
+
+  if (!members || members.length === 0) {
+    el.querySelector('#ftm-body').innerHTML =
+      `<p class="ftm-empty">この日この現場にアサインされたメンバーがいません</p>`;
+    return;
+  }
+
+  // メンバーリスト描画
+  const rows = members.map((m, i) => `
+    <div class="ftm-row${i === 0 ? ' ftm-row-first' : ''}" data-uid="${m.user_id}">
+      <span class="ftm-name">${escHtml(m.user_name)}</span>
+      <div class="ftm-fields">
+        <label class="ftm-field">
+          <span class="ftm-field-lbl">人工</span>
+          <input class="ftm-man ftm-num" type="number" min="0" max="2" step="0.5"
+                 value="${m.man_days}">
+        </label>
+        <label class="ftm-field">
+          <span class="ftm-field-lbl">残業h</span>
+          <input class="ftm-ot ftm-num" type="number" min="0" max="24" step="0.5"
+                 value="${m.overtime_hours}">
+        </label>
+        <div class="ftm-field ftm-field-car">
+          <span class="ftm-field-lbl">車</span>
+          <label class="ftm-radio"><input type="radio" name="ftm_car_${m.user_id}" value="1"
+            ${m.used_car ? 'checked' : ''}> 有</label>
+          <label class="ftm-radio"><input type="radio" name="ftm_car_${m.user_id}" value="0"
+            ${!m.used_car ? 'checked' : ''}> 無</label>
+        </div>
+      </div>
+    </div>`).join('');
+
+  el.querySelector('#ftm-body').innerHTML = `
+    <p class="ftm-hint">1人目を入力すると他のメンバーに自動反映されます</p>
+    <div class="ftm-list" id="ftm-list">${rows}</div>
+    <div class="modal-error" id="ftm-err"></div>`;
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  footer.innerHTML = `
+    <button class="btn btn-secondary" id="ftm-cancel">閉じる</button>
+    <button class="btn btn-primary"   id="ftm-save">全員分を保存</button>`;
+  el.querySelector('.ftm-modal').appendChild(footer);
+
+  el.querySelector('#ftm-cancel').addEventListener('click', close);
+
+  // 1行目の入力変更 → 他の行に自動反映
+  const firstRow = el.querySelector('.ftm-row-first');
+  if (firstRow) {
+    const syncToOthers = () => {
+      const man = firstRow.querySelector('.ftm-man').value;
+      const ot  = firstRow.querySelector('.ftm-ot').value;
+      const car = firstRow.querySelector(`input[name^="ftm_car_"]:checked`)?.value ?? '0';
+      el.querySelectorAll('.ftm-row:not(.ftm-row-first)').forEach(row => {
+        row.querySelector('.ftm-man').value = man;
+        row.querySelector('.ftm-ot').value  = ot;
+        const uid  = row.dataset.uid;
+        const radio = row.querySelector(`input[name="ftm_car_${uid}"][value="${car}"]`);
+        if (radio) radio.checked = true;
+      });
+    };
+    firstRow.querySelector('.ftm-man').addEventListener('change', syncToOthers);
+    firstRow.querySelector('.ftm-ot').addEventListener('change',  syncToOthers);
+    firstRow.querySelectorAll('input[type="radio"]').forEach(r =>
+      r.addEventListener('change', syncToOthers));
+  }
+
+  // 保存
+  el.querySelector('#ftm-save').addEventListener('click', async () => {
+    const saveBtn = el.querySelector('#ftm-save');
+    const errEl   = el.querySelector('#ftm-err');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    errEl.classList.remove('visible');
+
+    const payload = [...el.querySelectorAll('.ftm-row')].map(row => {
+      const uid = Number(row.dataset.uid);
+      const man = parseFloat(row.querySelector('.ftm-man').value) || 0;
+      const ot  = parseFloat(row.querySelector('.ftm-ot').value)  || 0;
+      const car = row.querySelector(`input[name="ftm_car_${uid}"][value="1"]`)?.checked ?? false;
+      return { user_id: uid, man_days: man, overtime_hours: ot, used_car: car };
+    });
+
+    try {
+      await apiUpsertTeamReports(siteId, dateStr, payload);
+      showToast(`${payload.length}名分の日報を保存しました`, 'success');
+      close();
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('visible');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '全員分を保存';
+    }
+  });
 }
 
 // ─── Init ────────────────────────────────────────────────────

@@ -214,3 +214,69 @@ func (h *ForemanHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, suggestions)
 }
+
+// GET /api/foreman/team-reports?site_id=X&work_date=YYYY-MM-DD
+// 職長（またはAdmin）がその日その現場のメンバー全員の日報データを取得する
+func (h *ForemanHandler) GetTeamReports(w http.ResponseWriter, r *http.Request) {
+	tenantID := currentTenantID(r)
+	userID   := currentUserID(r)
+	role     := currentUserRole(r)
+
+	siteID, err := strconv.ParseInt(r.URL.Query().Get("site_id"), 10, 64)
+	if err != nil || siteID == 0 {
+		writeError(w, http.StatusBadRequest, "site_id が不正です")
+		return
+	}
+	workDate := r.URL.Query().Get("work_date")
+	if workDate == "" {
+		writeError(w, http.StatusBadRequest, "work_date が必要です")
+		return
+	}
+
+	if role != "admin" {
+		ok, err := h.foremanRepo.IsForeman(r.Context(), tenantID, siteID, workDate, userID)
+		if err != nil || !ok {
+			writeError(w, http.StatusForbidden, "この操作は担当職長のみ実行できます")
+			return
+		}
+	}
+
+	members, err := h.foremanRepo.GetTeamReports(r.Context(), tenantID, siteID, workDate)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "取得エラー: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, members)
+}
+
+// PUT /api/foreman/team-reports
+// 職長がチームメンバー全員の日報を一括保存する
+func (h *ForemanHandler) UpsertTeamReports(w http.ResponseWriter, r *http.Request) {
+	tenantID := currentTenantID(r)
+	userID   := currentUserID(r)
+	role     := currentUserRole(r)
+
+	var req model.TeamReportsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "リクエスト形式が不正です")
+		return
+	}
+	if req.SiteID == 0 || req.WorkDate == "" || len(req.Members) == 0 {
+		writeError(w, http.StatusBadRequest, "site_id, work_date, members が必要です")
+		return
+	}
+
+	if role != "admin" {
+		ok, err := h.foremanRepo.IsForeman(r.Context(), tenantID, req.SiteID, req.WorkDate, userID)
+		if err != nil || !ok {
+			writeError(w, http.StatusForbidden, "この操作は担当職長のみ実行できます")
+			return
+		}
+	}
+
+	if err := h.foremanRepo.UpsertTeamReports(r.Context(), tenantID, req.SiteID, req.WorkDate, req.Members); err != nil {
+		writeError(w, http.StatusInternalServerError, "保存エラー: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

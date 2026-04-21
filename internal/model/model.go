@@ -199,6 +199,31 @@ type DailyReportUpsertRequest struct {
 	Note          *string      `json:"note,omitempty"`
 }
 
+// TeamMemberReport は職長がチーム日報入力で取得するメンバー1人分のデータ
+type TeamMemberReport struct {
+	UserID        int64   `db:"user_id"        json:"user_id"`
+	UserName      string  `db:"user_name"      json:"user_name"`
+	ManDays       float64 `db:"man_days"       json:"man_days"`
+	OvertimeHours float64 `db:"overtime_hours" json:"overtime_hours"`
+	UsedCar       bool    `db:"used_car"       json:"used_car"`
+	HasReport     bool    `db:"has_report"     json:"has_report"`
+}
+
+// TeamMemberPayload はチーム日報一括保存の1メンバー分
+type TeamMemberPayload struct {
+	UserID        int64   `json:"user_id"`
+	ManDays       float64 `json:"man_days"`
+	OvertimeHours float64 `json:"overtime_hours"`
+	UsedCar       bool    `json:"used_car"`
+}
+
+// TeamReportsRequest はチーム日報一括保存リクエスト
+type TeamReportsRequest struct {
+	SiteID   int64               `json:"site_id"`
+	WorkDate string              `json:"work_date"`
+	Members  []TeamMemberPayload `json:"members"`
+}
+
 // MonthlySummaryRow は月次サマリの1行
 type MonthlySummaryRow struct {
 	UserID        int64   `json:"user_id"`

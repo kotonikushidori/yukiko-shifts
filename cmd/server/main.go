@@ -148,6 +148,10 @@ func main() {
 
 		// 職長自動提案（ロック時確認用）
 		r.Get("/api/foreman/suggest", handler.RequireAdmin(foremanH.Suggest))
+
+		// 職長によるチーム日報一括入力
+		r.Get("/api/foreman/team-reports", foremanH.GetTeamReports)
+		r.Put("/api/foreman/team-reports", foremanH.UpsertTeamReports)
 	})
 
 	// SPAフォールバック

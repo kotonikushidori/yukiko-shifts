@@ -2187,3 +2187,110 @@ button.week-foreman-badge:hover { filter: brightness(1.15); }
   gap: 6px;
   margin-top: 2px;
 }
+
+/* ─── マイシフト: 職長アイコン ───────────────────────────────── */
+.wk-foreman-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 2px 7px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  vertical-align: middle;
+  transition: background .12s;
+}
+.wk-foreman-btn:hover { background: #fde68a; }
+.wk-foreman-icon { font-size: 14px; }
+.wk-foreman-label { font-size: 11px; }
+
+/* ─── 職長チーム日報モーダル ─────────────────────────────────── */
+.ftm-modal { max-width: 540px; width: 95vw; }
+
+.ftm-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-left: 8px;
+}
+
+.ftm-hint {
+  font-size: 12px;
+  color: #6366f1;
+  background: #eef2ff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 0 0 10px;
+}
+
+.ftm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.ftm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.ftm-row-first {
+  background: #f0f4ff;
+  border-color: #c7d2fe;
+}
+
+.ftm-name {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ftm-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.ftm-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ftm-field-lbl {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+.ftm-num {
+  width: 58px;
+  padding: 3px 5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 13px;
+  text-align: right;
+}
+.ftm-field-car { gap: 4px; }
+.ftm-radio { font-size: 12px; color: #334155; cursor: pointer; }
+
+.ftm-error, .ftm-empty {
+  font-size: 13px;
+  color: #dc2626;
+  padding: 10px;
+}

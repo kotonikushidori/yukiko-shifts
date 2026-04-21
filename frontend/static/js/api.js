@@ -219,3 +219,14 @@ export function apiDeleteForemanAssignment(siteId, workDate) {
 export function apiGetForemanSuggestions(year, month) {
   return request(`/api/foreman/suggest?year=${year}&month=${month}`);
 }
+
+// 職長チーム日報
+export function apiGetTeamReports(siteId, workDate) {
+  return request(`/api/foreman/team-reports?site_id=${siteId}&work_date=${workDate}`);
+}
+export function apiUpsertTeamReports(siteId, workDate, members) {
+  return request('/api/foreman/team-reports', {
+    method: 'PUT',
+    body: JSON.stringify({ site_id: siteId, work_date: workDate, members }),
+  });
+}
