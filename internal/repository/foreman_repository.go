@@ -82,6 +82,25 @@ func (r *ForemanRepository) UpsertAssignment(
 	return err
 }
 
+// GetForeman は指定現場×日付の現在の職長アサインを返す（存在しない場合は nil）
+func (r *ForemanRepository) GetForeman(ctx context.Context, siteID int64, workDate string) (*model.ForemanAssignment, error) {
+	var row model.ForemanAssignment
+	err := r.db.GetContext(ctx, &row, `
+		SELECT fa.*, u.name AS user_name, s.name AS site_name
+		FROM foreman_assignments fa
+		JOIN users u ON fa.user_id = u.id
+		JOIN sites s ON fa.site_id = s.id
+		WHERE fa.site_id = ? AND fa.work_date = ?
+		LIMIT 1`, siteID, workDate)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 // DeleteAssignment は職長アサインを削除する
 func (r *ForemanRepository) DeleteAssignment(ctx context.Context, tenantID, siteID int64, workDate string) error {
 	_, err := r.db.ExecContext(ctx,

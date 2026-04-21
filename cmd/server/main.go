@@ -72,7 +72,7 @@ func main() {
 	pushSender := push.NewSender(vapidPrivateKey, vapidPublicKey)
 
 	authH    := handler.NewAuthHandler(userRepo, tokenAuth)
-	shiftH   := handler.NewShiftHandler(shiftRepo, userRepo, shiftVal)
+	shiftH   := handler.NewShiftHandler(shiftRepo, userRepo, foremanRepo, shiftVal)
 	reportH  := handler.NewDailyReportHandler(reportRepo)
 	siteH    := handler.NewSiteHandler(siteRepo)
 	lockH    := handler.NewLockHandler(lockRepo)

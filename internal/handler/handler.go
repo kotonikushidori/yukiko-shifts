@@ -105,17 +105,19 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // ============================================================
 
 type ShiftHandler struct {
-	shiftRepo *repository.ShiftRepository
-	userRepo  *repository.UserRepository
-	validator *validator.ShiftValidator
+	shiftRepo   *repository.ShiftRepository
+	userRepo    *repository.UserRepository
+	foremanRepo *repository.ForemanRepository
+	validator   *validator.ShiftValidator
 }
 
 func NewShiftHandler(
 	shiftRepo *repository.ShiftRepository,
 	userRepo *repository.UserRepository,
+	foremanRepo *repository.ForemanRepository,
 	v *validator.ShiftValidator,
 ) *ShiftHandler {
-	return &ShiftHandler{shiftRepo: shiftRepo, userRepo: userRepo, validator: v}
+	return &ShiftHandler{shiftRepo: shiftRepo, userRepo: userRepo, foremanRepo: foremanRepo, validator: v}
 }
 
 // GET /api/workers  — 作業者一覧
@@ -281,12 +283,14 @@ func (h *ShiftHandler) CreateAssign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 作業者情報取得（バリデーションメッセージ用）
+	// 作業者情報取得（バリデーション用・職長資格チェック用）
 	users, _ := h.userRepo.FindAll(r.Context())
-	userName := ""
+	var userName string
+	var isQualified bool
 	for _, u := range users {
 		if u.ID == req.UserID {
 			userName = u.Name
+			isQualified = u.IsForemanQualified
 			break
 		}
 	}
@@ -300,8 +304,9 @@ func (h *ShiftHandler) CreateAssign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	adminID := currentUserID(r)
+	tenantID := currentTenantID(r)
 	id, err := h.shiftRepo.CreateAssignment(r.Context(), model.ShiftAssignment{
-		TenantID:  currentTenantID(r),
+		TenantID:  tenantID,
 		SiteID:    siteID,
 		UserID:    req.UserID,
 		WorkDate:  workDate,
@@ -312,6 +317,14 @@ func (h *ShiftHandler) CreateAssign(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "登録エラー")
 		return
 	}
+
+	// 職長資格ありの作業者をアサインした場合、その日その現場に職長未設定なら自動アサイン
+	if isQualified && h.foremanRepo != nil {
+		if existing, _ := h.foremanRepo.GetForeman(r.Context(), siteID, dateStr); existing == nil {
+			_ = h.foremanRepo.UpsertAssignment(r.Context(), tenantID, siteID, dateStr, req.UserID, false)
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
