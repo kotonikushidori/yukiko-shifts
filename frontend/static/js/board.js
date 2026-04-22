@@ -213,6 +213,7 @@ function renderKanbanCard(a) {
 /** 週表示用バッジ（ドラッグ可能） */
 function renderWeekBadge(a) {
   const cls      = SLOT_CLS[a.time_slot] ?? 'badge-am';
+  const label    = SLOT_LABEL[a.time_slot] ?? a.time_slot;
   const name     = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date     = parseWorkDate(a.work_date);
   const isForeman   = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
@@ -232,7 +233,7 @@ function renderWeekBadge(a) {
           data-site-id="${a.site_id}"
           data-date="${date}"
           title="${name}（${a.time_slot}）${isForeman ? '（職長アサイン済み）' : (isQualified ? '（職長資格あり）' : '')}">
-      <span class="badge-slot-label">${a.time_slot}</span>
+      <span class="badge-slot-label">${label}</span>
       ${qualMark}
       ${name}
       ${delBtn}
