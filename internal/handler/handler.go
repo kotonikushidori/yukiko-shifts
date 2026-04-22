@@ -396,7 +396,7 @@ func (h *DailyReportHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "保存エラー")
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // GET /api/reports/my?year=2025&month=5
