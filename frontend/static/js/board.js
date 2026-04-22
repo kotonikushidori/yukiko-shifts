@@ -183,11 +183,13 @@ export async function loadBoard({ silent = false } = {}) {
 }
 
 // ─── Card / Badge Renders ────────────────────────────────────
-const SLOT_CLS = { AM: 'badge-am', PM: 'badge-pm', ALL: 'badge-all' };
+const SLOT_CLS   = { AM: 'badge-am', PM: 'badge-pm', ALL: 'badge-all' };
+const SLOT_LABEL = { AM: '前', PM: '後', ALL: '全' };
 
 /** カンバン用カード（1日表示） */
 function renderKanbanCard(a) {
   const cls     = SLOT_CLS[a.time_slot] ?? 'badge-am';
+  const label   = SLOT_LABEL[a.time_slot] ?? a.time_slot;
   const name    = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
   const date    = parseWorkDate(a.work_date);
   const isForeman  = st.foremanMap[`${a.site_id}_${date}`]?.user_id === a.user_id;
@@ -201,7 +203,7 @@ function renderKanbanCard(a) {
          data-slot="${a.time_slot}"
          data-site-id="${a.site_id}"
          data-date="${date}">
-      <span class="kcard-slot">${a.time_slot}</span>
+      <span class="kcard-slot">${label}</span>
       ${isForeman ? '<span class="kcard-foreman-badge">職長</span>' : (isQualified ? '<span class="kcard-qual-badge" title="職長資格あり">★</span>' : '')}
       <span class="kcard-name">${name}</span>
       ${delBtn}
