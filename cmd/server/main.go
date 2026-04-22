@@ -94,6 +94,7 @@ func main() {
 
 	// 認証不要
 	r.Post("/api/auth/login", authH.Login)
+	r.Get("/qr-login", authH.QRLogin) // QRコードスキャンによるログイン
 
 	// 認証必要 + テナント自動注入
 	r.Group(func(r chi.Router) {
@@ -104,6 +105,8 @@ func main() {
 		r.Get("/api/workers",                    shiftH.GetWorkers)
 		r.Post("/api/admin/workers",             handler.RequireAdmin(shiftH.CreateWorker))
 		r.Put("/api/admin/workers/{id}",         handler.RequireAdmin(shiftH.UpdateWorker))
+		r.Get("/api/admin/workers/qr-tokens",    handler.RequireAdmin(shiftH.GetWorkerQRTokens))
+		r.Post("/api/admin/workers/{id}/regenerate-qr", handler.RequireAdmin(shiftH.RegenerateQR))
 		r.Get("/api/shifts/board",  shiftH.GetBoard)
 		r.Get("/api/shifts/my",     shiftH.GetMyShifts)
 

@@ -1,6 +1,6 @@
 // workers.js — 作業者管理（管理者用）
 
-import { apiGetWorkers, apiCreateWorker, apiUpdateWorker } from './api.js';
+import { apiGetWorkers, apiCreateWorker, apiUpdateWorker, apiRegenerateQR } from './api.js';
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -43,6 +43,7 @@ function render(root) {
     <div class="wm-page">
       <div class="wm-header">
         <h2 class="wm-title">作業者管理</h2>
+        <button class="btn btn-secondary" id="wm-qr-print-btn">🖨 QRシート印刷</button>
         <button class="btn btn-primary" id="wm-add-btn">＋ 追加</button>
       </div>
       <table class="wm-table">
@@ -57,6 +58,9 @@ function render(root) {
     </div>`;
 
   document.getElementById('wm-add-btn').addEventListener('click', () => openModal(null));
+  document.getElementById('wm-qr-print-btn').addEventListener('click', () => {
+    window.open('/static/qr-print.html', '_blank');
+  });
   root.querySelectorAll('.wm-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const w = _workers.find(w => w.id === parseInt(btn.dataset.id, 10));
@@ -115,6 +119,13 @@ function openModal(worker) {
           職長資格あり
         </label>
       </div>
+      ${!isNew ? `
+      <div class="wm-field wm-qr-section">
+        <label>QRコードログイン</label>
+        <button class="btn btn-sm btn-secondary" id="wm-regen-qr-btn" type="button">QRトークンを再発行する</button>
+        <div class="wm-qr-note">※再発行すると現在のQRコードが無効になります</div>
+        <div class="wm-qr-msg" id="wm-qr-msg" style="display:none"></div>
+      </div>` : ''}
       <div class="wm-error" id="wm-err" style="display:none"></div>
     </div>
     <div class="wm-modal-footer">
@@ -128,6 +139,30 @@ function openModal(worker) {
   document.getElementById('wm-cancel-btn').addEventListener('click', closeModal);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
   document.getElementById('wm-save-btn').addEventListener('click', saveWorker);
+
+  if (!isNew) {
+    document.getElementById('wm-regen-qr-btn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('wm-regen-qr-btn');
+      const msg = document.getElementById('wm-qr-msg');
+      if (!confirm('QRトークンを再発行しますか？\n現在のQRコードが無効になります。')) return;
+      btn.disabled = true;
+      btn.textContent = '再発行中…';
+      msg.style.display = 'none';
+      try {
+        await apiRegenerateQR(_editId);
+        msg.textContent = '再発行しました。QRシート印刷から新しいQRコードを印刷してください。';
+        msg.style.color = 'green';
+        msg.style.display = 'block';
+        btn.textContent = '再発行完了';
+      } catch (e) {
+        msg.textContent = '再発行に失敗しました: ' + e.message;
+        msg.style.color = 'red';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'QRトークンを再発行する';
+      }
+    });
+  }
 }
 
 function closeModal() {

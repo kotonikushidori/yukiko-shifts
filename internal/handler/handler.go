@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,6 +16,12 @@ import (
 	"github.com/yourorg/shift-app/internal/repository"
 	"github.com/yourorg/shift-app/internal/validator"
 )
+
+func generateWorkerQRToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
 
 // ============================================================
 // ヘルパー
@@ -98,6 +106,47 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, model.LoginResponse{Token: tokenStr, User: *user})
+}
+
+// GET /qr-login?token=xxx  — QRコードによる認証不要ログイン
+func (h *AuthHandler) QRLogin(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "トークンが指定されていません", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.userRepo.FindByQRToken(r.Context(), token)
+	if err != nil || user == nil {
+		http.Error(w, "無効なQRコードです", http.StatusUnauthorized)
+		return
+	}
+
+	_, tokenStr, _ := h.tokenAuth.Encode(map[string]any{
+		"user_id":   user.ID,
+		"tenant_id": user.TenantID,
+		"role":      user.Role,
+		"name":      user.Name,
+		"exp":       time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenJSON, _ := json.Marshal(tokenStr)
+	userJSON, _ := json.Marshal(user)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ログイン中...</title></head>
+<body>
+<script>
+try {
+  localStorage.setItem('shift_token', %s);
+  localStorage.setItem('shift_user', %s);
+  window.location.replace('/');
+} catch(e) {
+  document.write('ログインに失敗しました: ' + e.message);
+}
+</script>
+</body></html>`, tokenJSON, userJSON)
 }
 
 // ============================================================
@@ -206,6 +255,38 @@ func (h *ShiftHandler) UpdateWorker(w http.ResponseWriter, r *http.Request) {
 		_ = h.userRepo.UpdatePassword(r.Context(), id, string(hash))
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// GET /api/admin/workers/qr-tokens  — 作業者QRトークン一覧（管理者用）
+func (h *ShiftHandler) GetWorkerQRTokens(w http.ResponseWriter, r *http.Request) {
+	tenantID := currentTenantID(r)
+	rows, err := h.userRepo.GetAllQRTokens(r.Context(), tenantID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "データ取得エラー")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+// POST /api/admin/workers/{id}/regenerate-qr  — QRトークン再発行（管理者用）
+func (h *ShiftHandler) RegenerateQR(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id が不正です")
+		return
+	}
+	tenantID := currentTenantID(r)
+	existing, err := h.userRepo.FindByID(r.Context(), tenantID, id)
+	if err != nil || existing == nil {
+		writeError(w, http.StatusNotFound, "作業者が見つかりません")
+		return
+	}
+	token := generateWorkerQRToken()
+	if err := h.userRepo.UpdateQRToken(r.Context(), id, token); err != nil {
+		writeError(w, http.StatusInternalServerError, "QR更新エラー")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"qr_token": token})
 }
 
 // GET /api/shifts/board?from=2025-05-25&to=2025-05-31

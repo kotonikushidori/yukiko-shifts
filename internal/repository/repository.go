@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -10,6 +11,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/yourorg/shift-app/internal/model"
 )
+
+func generateQRToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
 
 // ============================================================
 // ShiftRepository
@@ -336,11 +343,15 @@ func (r *UserRepository) FindWorkers(ctx context.Context) ([]model.User, error) 
 }
 
 func (r *UserRepository) Create(ctx context.Context, u model.User) (int64, error) {
+	if u.Role == model.RoleWorker && (u.QRToken == nil || *u.QRToken == "") {
+		token := generateQRToken()
+		u.QRToken = &token
+	}
 	const q = `
 		INSERT INTO users
-			(tenant_id, employee_id, email, password_hash, name, last_name, first_name, role, phone, status)
+			(tenant_id, employee_id, email, password_hash, name, last_name, first_name, role, phone, status, qr_token)
 		VALUES
-			(:tenant_id, :employee_id, :email, :password_hash, :name, :last_name, :first_name, :role, :phone, :status)`
+			(:tenant_id, :employee_id, :email, :password_hash, :name, :last_name, :first_name, :role, :phone, :status, :qr_token)`
 	res, err := r.db.NamedExecContext(ctx, q, u)
 	if err != nil {
 		return 0, err
@@ -377,6 +388,39 @@ func (r *UserRepository) FindByID(ctx context.Context, tenantID, id int64) (*mod
 		return nil, nil
 	}
 	return &u, err
+}
+
+// FindByQRToken はQRトークンでユーザーを検索する
+func (r *UserRepository) FindByQRToken(ctx context.Context, token string) (*model.User, error) {
+	var u model.User
+	err := r.db.GetContext(ctx, &u,
+		`SELECT * FROM users WHERE qr_token = ? AND status = 'active'`, token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &u, err
+}
+
+// UpdateQRToken はユーザーのQRトークンを更新する
+func (r *UserRepository) UpdateQRToken(ctx context.Context, id int64, token string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE users SET qr_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		token, id)
+	return err
+}
+
+// GetAllQRTokens はテナント内の全作業者のQRトークン一覧を返す（管理者用）
+func (r *UserRepository) GetAllQRTokens(ctx context.Context, tenantID int64) ([]model.QRTokenRow, error) {
+	var rows []model.QRTokenRow
+	err := r.db.SelectContext(ctx, &rows,
+		`SELECT id, name, employee_id, qr_token FROM users
+		 WHERE tenant_id = ? AND role = 'worker' AND status = 'active' AND qr_token IS NOT NULL
+		 ORDER BY name`,
+		tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("GetAllQRTokens: %w", err)
+	}
+	return rows, nil
 }
 
 // ============================================================

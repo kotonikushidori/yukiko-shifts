@@ -56,8 +56,17 @@ type User struct {
 	Phone               *string   `db:"phone"                 json:"phone,omitempty"`
 	Status              string    `db:"status"                json:"status"`
 	IsForemanQualified  bool      `db:"is_foreman_qualified"  json:"is_foreman_qualified"`
+	QRToken             *string   `db:"qr_token"              json:"-"` // QRコードログイン用トークン（APIには非公開）
 	CreatedAt           time.Time `db:"created_at"            json:"created_at"`
 	UpdatedAt           time.Time `db:"updated_at"            json:"updated_at"`
+}
+
+// QRTokenRow は管理者向けQRシート印刷用の作業者情報
+type QRTokenRow struct {
+	ID         int64  `db:"id"          json:"id"`
+	Name       string `db:"name"        json:"name"`
+	EmployeeID string `db:"employee_id" json:"employee_id"`
+	QRToken    string `db:"qr_token"    json:"qr_token"`
 }
 
 // ──────────────────────────────────────

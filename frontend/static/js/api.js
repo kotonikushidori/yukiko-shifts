@@ -71,6 +71,16 @@ export function apiUpdateWorker(id, data) {
   });
 }
 
+// GET /api/admin/workers/qr-tokens
+export function apiGetWorkerQRTokens() {
+  return request('/api/admin/workers/qr-tokens');
+}
+
+// POST /api/admin/workers/{id}/regenerate-qr
+export function apiRegenerateQR(id) {
+  return request(`/api/admin/workers/${id}/regenerate-qr`, { method: 'POST' });
+}
+
 // ─── 現場マスタ ──────────────────────────────────────────────
 
 // GET /api/sites
