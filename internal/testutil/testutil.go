@@ -44,6 +44,7 @@ func NewDB(t *testing.T) *sqlx.DB {
 			phone                TEXT,
 			status               TEXT    NOT NULL DEFAULT 'active',
 			is_foreman_qualified INTEGER NOT NULL DEFAULT 0,
+			qr_token             TEXT,
 			created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(tenant_id, employee_id)
