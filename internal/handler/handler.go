@@ -140,7 +140,7 @@ func (h *AuthHandler) QRLogin(w http.ResponseWriter, r *http.Request) {
 <script>
 try {
   localStorage.setItem('shift_token', %s);
-  localStorage.setItem('shift_user', %s);
+  localStorage.setItem('shift_user', JSON.stringify(%s));
   window.location.replace('/');
 } catch(e) {
   document.write('ログインに失敗しました: ' + e.message);

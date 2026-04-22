@@ -75,6 +75,11 @@ func TestQRLogin_ValidToken_Returns200HTML(t *testing.T) {
 		t.Error("レスポンスに localStorage.setItem が含まれていない")
 	}
 
+	// shift_user は JSON.stringify で文字列化されていること
+	if !strings.Contains(body, "JSON.stringify(") {
+		t.Error("shift_user が JSON.stringify で囲まれていない（[object Object]バグの可能性）")
+	}
+
 	// 正規のリダイレクト先が含まれること
 	if !strings.Contains(body, "window.location.replace") {
 		t.Error("レスポンスに window.location.replace が含まれていない")
