@@ -123,7 +123,8 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- qrcodejs: ブラウザ向け実績ある QR ライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script>
     function escHtml(s) {
       return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -178,15 +179,13 @@
           grid.appendChild(card);
 
           const url = origin + '/qr-login?token=' + encodeURIComponent(w.qr_token);
-          QRCode.toCanvas(url, { width: 180, margin: 1, errorCorrectionLevel: 'M' },
-            (err, canvas) => {
-              if (err) {
-                document.getElementById(canvasId).textContent = 'QR生成エラー';
-                return;
-              }
-              document.getElementById(canvasId).appendChild(canvas);
-            }
-          );
+          // qrcodejs API: new QRCode(element, options)
+          new QRCode(document.getElementById(canvasId), {
+            text:         url,
+            width:        180,
+            height:       180,
+            correctLevel: QRCode.CorrectLevel.M,
+          });
         });
       })
       .catch(e => {
