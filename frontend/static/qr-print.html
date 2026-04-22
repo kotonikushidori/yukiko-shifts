@@ -151,6 +151,16 @@
           return;
         }
 
+        // ?id= が指定されている場合は該当作業者のみ表示
+        const targetId = new URLSearchParams(window.location.search).get('id');
+        if (targetId) {
+          workers = workers.filter(w => String(w.id) === targetId);
+          if (workers.length === 0) {
+            grid.innerHTML = '<div class="state-msg error">該当する作業者が見つかりません。</div>';
+            return;
+          }
+        }
+
         grid.innerHTML = '';
         const origin = window.location.origin;
 

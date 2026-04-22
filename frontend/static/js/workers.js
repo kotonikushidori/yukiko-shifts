@@ -122,7 +122,10 @@ function openModal(worker) {
       ${!isNew ? `
       <div class="wm-field wm-qr-section">
         <label>QRコードログイン</label>
-        <button class="btn btn-sm btn-secondary" id="wm-regen-qr-btn" type="button">QRトークンを再発行する</button>
+        <div class="wm-qr-btns">
+          <button class="btn btn-sm btn-secondary" id="wm-print-qr-btn" type="button">🖨 個別QR印刷</button>
+          <button class="btn btn-sm btn-secondary" id="wm-regen-qr-btn" type="button">QRトークンを再発行する</button>
+        </div>
         <div class="wm-qr-note">※再発行すると現在のQRコードが無効になります</div>
         <div class="wm-qr-msg" id="wm-qr-msg" style="display:none"></div>
       </div>` : ''}
@@ -141,6 +144,10 @@ function openModal(worker) {
   document.getElementById('wm-save-btn').addEventListener('click', saveWorker);
 
   if (!isNew) {
+    document.getElementById('wm-print-qr-btn')?.addEventListener('click', () => {
+      window.open('/static/qr-print.html?id=' + _editId, '_blank');
+    });
+
     document.getElementById('wm-regen-qr-btn')?.addEventListener('click', async () => {
       const btn = document.getElementById('wm-regen-qr-btn');
       const msg = document.getElementById('wm-qr-msg');
