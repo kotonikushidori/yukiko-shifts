@@ -43,12 +43,16 @@ function render(root) {
     <div class="wm-page">
       <div class="wm-header">
         <h2 class="wm-title">作業者管理</h2>
-        <button class="btn btn-secondary" id="wm-qr-print-btn">🖨 QRシート印刷</button>
         <button class="btn btn-primary" id="wm-add-btn">＋ 追加</button>
       </div>
       <table class="wm-table">
         <thead>
-          <tr><th>社員ID</th><th>苗字</th><th>名前</th><th>職長</th><th>電話</th><th></th></tr>
+          <tr>
+            <th>社員ID</th><th>苗字</th><th>名前</th><th>職長</th><th>電話</th>
+            <th class="wm-th-qr">
+              <button class="wm-qr-icon-btn" id="wm-qr-print-btn" title="QRシート印刷（全員）">🖨</button>
+            </th>
+          </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>

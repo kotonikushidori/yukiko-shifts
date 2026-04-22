@@ -641,15 +641,23 @@ function buildBulkBody(siteId, date) {
   const assignedIds = new Set(current.map(a => Number(a.user_id)));
 
   // 現在のアサイン
+  const workerPhoneMap = Object.fromEntries(
+    st.workers.map(w => [w.id, w.phone ?? null])
+  );
   const currentHTML = current.length === 0
     ? `<p class="bulk-empty">まだアサインがありません</p>`
     : current.map(a => {
-        const name = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
-        const cls  = SLOT_CLS[a.time_slot] ?? 'badge-am';
+        const name  = escHtml(st.workerDispMap[a.user_id] ?? a.user_name ?? `ID:${a.user_id}`);
+        const cls   = SLOT_CLS[a.time_slot] ?? 'badge-am';
+        const phone = workerPhoneMap[a.user_id];
+        const phoneHTML = phone
+          ? `<a class="bulk-assign-phone" href="tel:${escHtml(phone)}">${escHtml(phone)}</a>`
+          : '';
         return `
           <div class="bulk-assign-row">
             <span class="badge ${cls} bulk-badge">${a.time_slot}</span>
             <span class="bulk-assign-name">${name}</span>
+            ${phoneHTML}
             <button class="bulk-del" data-assign-id="${a.id}" title="削除">×</button>
           </div>`;
       }).join('');
